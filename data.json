@@ -1,0 +1,11 @@
+[
+    {
+        "platform": "bilibili",
+        "username": "精选油管评论",
+        "video_path": "/path/to/video2.mp4",
+        "title": "标题2",
+        "cover_path": "/path/to/cover2.jpg",
+        "tags": ["tag3", "tag4"],
+        "publish_date": null
+    }
+]
