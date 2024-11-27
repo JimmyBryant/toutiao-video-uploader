@@ -34,7 +34,6 @@ def login(page, username, context):
             break
 
     print("登录成功！")
-    save_auth_state(username, context)
 
 def upload_video(page, video_path, title, tags, cover_path):
     """
@@ -45,14 +44,14 @@ def upload_video(page, video_path, title, tags, cover_path):
     :param tags: 视频标签列表
     :param cover_path: 封面图片路径
     """
-    print("开始上传视频...")
+    # 打开发布页面
+    page.goto("https://mp.toutiao.com/profile_v4/xigua/upload-video")
+    page.wait_for_load_state("load")
+    print("已进入发布页面")
     # 上传视频文件
     video_upload_input = page.locator('input[type="file"]').nth(0)  # 视频上传输入框
     video_upload_input.set_input_files(video_path)
     print("视频文件已选择")
-
-    # 等待视频上传成功
-    wait_for_upload_progress(page)
 
     # 输入视频标题
     print("填写视频标题...")
@@ -64,17 +63,24 @@ def upload_video(page, video_path, title, tags, cover_path):
     if tags:
         print("填写视频标签...")
         for tag in tags:
-            tag_input = page.locator('input[placeholder="请输入标签"]')
+            tag_input = page.locator('input.arco-input-tag-input')
+            tag_input.click()
             tag_input.fill(tag)
             tag_input.press("Enter")
+            time.sleep(1)
             print(f"添加标签: {tag}")
+
+    # 等待视频上传成功
+    wait_for_upload_progress(page)
 
     # 上传封面图片
     print("开始上传封面...")
     page.locator('.fake-upload-trigger').click()  # 点击封面上传按钮
     page.locator('li:has-text("本地上传")').click()  # 选择本地上传
     upload_cover_image(page,cover_path)
-
+    
+    # 发布视频
+    publish_video(page)
 
 def wait_for_upload_progress(page, no_change_timeout=30):
     """
@@ -149,7 +155,7 @@ def confirm_cover_image(page):
     else:
         raise Exception("未找到对话框的确认按钮")
     
-def publish_video(page, context):
+def publish_video(page):
     # 1. 定位发布按钮
     publish_button = page.locator(
         'button.byte-btn.byte-btn-primary.byte-btn-size-large.byte-btn-shape-square.action-footer-btn.submit',
@@ -180,8 +186,4 @@ def publish_video(page, context):
         timeout=60000  # 等待跳转完成，超时设置为 60 秒
     )
     print(f"页面跳转成功，当前 URL: {page.url}")
-
-    # 5. 关闭浏览器
-    context.close()
-    print("浏览器已关闭")
         
