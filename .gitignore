@@ -1,2 +1,4 @@
 auth/
 data/
+*.log
+__pycache__/

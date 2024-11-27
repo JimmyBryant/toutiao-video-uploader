@@ -1,11 +1,16 @@
 [
     {
         "platform": "bilibili",
-        "username": "精选油管评论",
-        "video_path": "/path/to/video2.mp4",
-        "title": "标题2",
-        "cover_path": "/path/to/cover2.jpg",
-        "tags": ["tag3", "tag4"],
-        "publish_date": null
+        "username": "芋泥boy",
+        "video_path": "/Volumes/disk/剪映Pro/不要做空中国/不要做空中国.mp4",
+        "title": "评论版|经济学家杰弗里·萨克斯 （Jeffrey Sachs） 揭示了 2025 年中国令人震惊的秘密",
+        "cover_path": "/Volumes/disk/剪映Pro/不要做空中国/不要做空中国-封面.jpg",
+        "tags": [
+            "中美关系",
+            "杰弗里",
+            "经济学"
+        ],
+        "desc": "传送门：https://www.youtube.com/watch?v=aLWmDTKhLjs&pp=ygUNY3lydXMgamFuc3Nlbg%3D%3D",
+        "publish_date": ""
     }
 ]

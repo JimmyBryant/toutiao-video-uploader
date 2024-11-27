@@ -1,79 +1,162 @@
 import os
 import time
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # 获取当前脚本所在目录
-AUTH_DIR = os.path.join(BASE_DIR, "auth")
-DATA_DIR = os.path.join(BASE_DIR, "data")
-os.makedirs(AUTH_DIR, exist_ok=True)  # 自动创建目录（如果不存在）
-
-
-def save_auth_state(username,context):
-    """保存登录状态到 AUTH_FILE"""
-    AUTH_FILE = os.path.join(AUTH_DIR, f"auth_bilibili_{username}.json")
-    context.storage_state(path=AUTH_FILE)
-    print(f"登录状态已保存为 {AUTH_FILE}")
 
 def login(page, username, context):
-    """手动扫码登录"""
-    # 打开登录页面
-    login_url = "https://www.bilibili.com"
+    """
+    登录 Bilibili 账号，并保存登录状态到对应的 JSON 文件。
+    
+    :param page: Playwright 的 Page 对象
+    :param username: 用户名，用于标记保存的登录状态文件
+    :param context: Playwright 的 Context 对象，用于管理浏览器上下文
+    """
+    # Bilibili 登录页面
+    login_url = "https://passport.bilibili.com/login"
     page.goto(login_url)
     page.wait_for_load_state("load")
-    print("请手动扫码登录...")
-
+    print(f"打开 Bilibili 登录页面: {login_url}")    
+    
     # 等待用户扫码完成
     while True:
         print("等待用户扫码并完成登录...")
         time.sleep(3)
-        # 打印当前 URL 以观察变化
-        print(f"当前页面 URL: {page.url}")
-        # 判断登录完成：通过 URL 或页面元素
-        if "upload-video" in page.url:  # 登录成功后跳转页面
+        
+        # 判断是否出现 "退出登录" 元素
+        if page.locator("span:has-text('退出登录')").count() > 0:
+            print("检测到 '退出登录'，登录成功！")
             break
-        if page.locator("text=上传视频").is_visible():  # 或者检查某个标志性元素
+
+        # 如果页面 URL 不再包含 "passport" 或 "login"，也视为成功跳转
+        if "passport" not in page.url and "login" not in page.url:
+            print(f"页面 URL 已跳转到: {page.url}")
             break
 
     print("登录成功！")
-    save_auth_state(username, context)
 
-def upload_video(page, video_path, title, tags, cover_path):
+
+def upload_video(page, video_path, title, desc, tags=None, cover_path=None):
     """
-    上传视频到今日头条
-    :param page: Playwright Page 对象
+    上传视频到 Bilibili 并设置标题、简介、标签和其他相关信息。
+
+    :param page: Playwright 的 Page 对象
     :param video_path: 视频文件路径
     :param title: 视频标题
+    :param desc: 视频简介
     :param tags: 视频标签列表
-    :param cover_path: 封面图片路径
+    :param cover_path: 封面图片路径（可选）
     """
-    print("开始上传视频...")
+    # 打开 Bilibili 上传视频页面
+    upload_url = "https://member.bilibili.com/platform/upload/video/frame"
+    page.goto(upload_url)
+    page.wait_for_load_state("load")
+    print(f"打开 Bilibili 上传视频页面: {page.url}")
+    
+
+    # 等待视频上传的文件输入框出现
+    try:
+        page.wait_for_selector('.bcc-upload-wrapper', timeout=5000)
+        file_input = page.locator(".bcc-upload-wrapper input[type='file']")
+
+        if file_input.count() == 0:
+            raise Exception("未找到视频文件输入框")
+        print("找到视频文件输入框")
+    except Exception as e:
+        raise e
+
     # 上传视频文件
-    video_upload_input = page.locator('input[type="file"]').nth(0)  # 视频上传输入框
-    video_upload_input.set_input_files(video_path)
-    print("视频文件已选择")
+    print(f"开始上传视频: {video_path}")
+    file_input.set_input_files(video_path)
 
-    # 等待视频上传成功
-    wait_for_upload_progress(page)
 
-    # 输入视频标题
-    print("填写视频标题...")
-    title_input = page.wait_for_selector('input[class*="xigua-input"]')
+    # 设置封面图片（如果提供了封面路径）
+    if cover_path:
+        print("上传封面图片...")
+        page.locator("span:has-text('更改封面')").click()
+        page.locator('.text:has-text("上传封面")').click()
+        cover_file_input = page.locator(".bcc-upload input[type='file'][accept*='image']").first
+        if cover_file_input.count() == 0:
+            raise Exception("未找到封面文件输入框")
+        cover_file_input.set_input_files(cover_path)
+        page.locator("button span:has-text('完成')").click()
+        print(f"封面图片上传完成: {cover_path}")
+
+    # 设置标题
+    title_input = page.locator("input.input-val[type='text'][maxlength='80']").first
+    if title_input.count() == 0:
+        raise Exception("未找到标题输入框")
     title_input.fill(title)
-    print("标题填写完成")
+    print(f"标题已设置: {title}")
 
-    # 输入视频标签
+    # 设置简介
+    print("填写视频简介...")
+    desc_editor = page.locator("div.ql-editor[data-placeholder*='填写更全面的相关信息'] p")
+    if desc_editor.count() == 0:
+        raise Exception("未找到简介输入框")
+    desc_editor.fill(desc)
+    print(f"视频简介已填写: {desc}")
+
+    # 设置标签（如果提供了标签）
     if tags:
-        print("填写视频标签...")
+        # 清空已有标签
+        print("清空已有标签...")
+        close_buttons = page.locator(".label-item-v2-container .close")
+        while close_buttons.count() > 0:
+            close_buttons.first.click()
+            print("删除一个标签")
+            time.sleep(1)  # 确保删除动作完成后再查找剩余标签
+        print("设置标签...")
         for tag in tags:
-            tag_input = page.locator('input[placeholder="请输入标签"]')
-            tag_input.fill(tag)
-            tag_input.press("Enter")
-            print(f"添加标签: {tag}")
+            tag_input = page.locator("input.input-val[type='text'][placeholder*='按回车键Enter创建标签']").first
+            if tag_input.count() == 0:
+                raise Exception("未找到标签输入框")
+            # 点击输入框以确保获得焦点
+            tag_input.click()
+            print(f"标签输入框已获得焦点")
 
-    # 上传封面图片
-    print("开始上传封面...")
-    page.locator('.fake-upload-trigger').click()  # 点击封面上传按钮
-    page.locator('li:has-text("本地上传")').click()  # 选择本地上传
-    upload_cover_image(page,cover_path)
+            # 填写标签内容
+            tag_input.fill(tag)
+            print(f"填写标签: {tag}")
+
+            # 按下回车键以添加标签
+            page.keyboard.press("Enter")
+            print(f"已添加标签: {tag}")
+            time.sleep(1)
+
+    # 等待上传完成
+    print("等待视频上传完成...")
+    prev_progress = None
+    unchanged_progress_time = 0
+    while True:
+        # 检查上传进度
+        try:
+            progress_text = page.locator("span.progress-text").inner_text()
+            if prev_progress == progress_text:
+                unchanged_progress_time += 2
+                if unchanged_progress_time >= 30:  # 进度超过 30 秒无变化，超时退出
+                    raise Exception("上传超时，进度未变化")
+            else:
+                unchanged_progress_time = 0  # 进度变化，重置计时
+                prev_progress = progress_text
+            print(f"当前上传进度: {progress_text}")
+        except:
+            pass
+
+        # 检查上传完成标志
+        if page.locator("div.file-item-content-status-text:has(span.success)").count() > 0:
+            print("视频上传完成！")
+            break
+
+        # 等待 2 秒后继续检查
+        time.sleep(2)
+
+
+    # 点击发布按钮
+    publish_button = page.locator(".submit-add:has-text('立即投稿')")
+    if publish_button.count() == 0:
+        raise Exception("未找到发布按钮")
+    publish_button.click()
+    time.sleep(1)
+    print("已点击发布按钮，视频发布成功！")
 
 
 def wait_for_upload_progress(page, no_change_timeout=30):

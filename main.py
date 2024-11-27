@@ -1,5 +1,6 @@
 import os
 import json
+import time
 from datetime import datetime
 from pathlib import Path
 from playwright.sync_api import sync_playwright
@@ -11,9 +12,10 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # 获取当前脚本所�
 AUTH_DIR = os.path.join(BASE_DIR, "auth")
 DATA_FILE = os.path.join(BASE_DIR, "./data.json")
 LOG_FILE = os.path.join(BASE_DIR, "error.log")
-
+os.makedirs(AUTH_DIR, exist_ok=True)  # 自动创建目录（如果不存在）
 # 支持的平台
 SUPPORTED_PLATFORMS = {"toutiao", "bilibili"}
+
 
 # 登录函数
 def login(platform, username, context):
@@ -42,6 +44,7 @@ def publish(platform, task, context):
             page=page,
             video_path=task["video_path"],
             title=task["title"],
+            desc=task["desc"],  # 传递简介信息
             tags=task["tags"],
             cover_path=task["cover_path"],
         )
