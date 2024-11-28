@@ -13,7 +13,7 @@ def save_auth_state(username,context):
     context.storage_state(path=AUTH_FILE)
     print(f"登录状态已保存为 {AUTH_FILE}")
 
-def login(page, username, context):
+def login(page):
     """手动扫码登录"""
     # 打开登录页面
     login_url = "https://mp.toutiao.com/auth/page/login?redirect_url=JTJGcHJvZmlsZV92NCUyRnhpZ3VhJTJGdXBsb2FkLXZpZGVv"
@@ -68,6 +68,7 @@ def upload_video(page, video_path, title, tags, cover_path):
             tag_input.fill(tag)
             tag_input.press("Enter")
             time.sleep(1)
+            tag_input.press("Enter")
             print(f"添加标签: {tag}")
 
     # 等待视频上传成功
@@ -78,7 +79,7 @@ def upload_video(page, video_path, title, tags, cover_path):
     page.locator('.fake-upload-trigger').click()  # 点击封面上传按钮
     page.locator('li:has-text("本地上传")').click()  # 选择本地上传
     upload_cover_image(page,cover_path)
-    
+
     # 发布视频
     publish_video(page)
 
@@ -99,7 +100,7 @@ def wait_for_upload_progress(page, no_change_timeout=30):
             progress_element = page.locator("span.percent")
             if progress_element.is_visible():
                 current_progress = progress_element.inner_text().strip()
-                print(f"当前上传进度: {current_progress}")
+                print(f"头条视频上传进度: {current_progress}")
 
                 # 检查是否上传成功
                 if "上传成功" in current_progress:
@@ -117,6 +118,7 @@ def wait_for_upload_progress(page, no_change_timeout=30):
 
         except Exception as e:
             print(f"检查上传进度时出错: {e}")
+            raise e
 
         # 每秒检查一次
         time.sleep(1)

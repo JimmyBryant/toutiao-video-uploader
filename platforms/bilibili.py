@@ -89,7 +89,7 @@ def upload_video(page, video_path, title, desc, tags=None, cover_path=None):
 
     # 设置简介
     print("填写视频简介...")
-    desc_editor = page.locator("div.ql-editor[data-placeholder*='填写更全面的相关信息'] p")
+    desc_editor = page.locator("div.ql-editor p").first
     if desc_editor.count() == 0:
         raise Exception("未找到简介输入框")
     desc_editor.fill(desc)
