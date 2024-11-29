@@ -18,12 +18,12 @@ SUPPORTED_PLATFORMS = {"toutiao", "bilibili"}
 
 
 # 登录函数
-def login(platform, username, context):
+def login(platform, context):
     page = context.new_page()
     if platform == "toutiao":
-        toutiao_login(page, username, context)
+        toutiao_login(page)
     elif platform == "bilibili":
-        bilibili_login(page, username, context)
+        bilibili_login(page)
     else:
         raise ValueError(f"未支持的平台: {platform}")
     page.close()
@@ -93,7 +93,7 @@ def main():
                     print(f"未检测到 {platform} 平台账号 {username} 的登录状态，开始登录...")
                     context = browser.new_context()
                     try:
-                        login(platform, username, context)
+                        login(platform, context)
                         context.storage_state(path=auth_file)         
                     except Exception as e:
                         print(f"登录失败: 平台={platform}, 用户={username}, 错误={e}")

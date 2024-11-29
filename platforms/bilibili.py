@@ -2,7 +2,7 @@ import os
 import time
 
 
-def login(page, username, context):
+def login(page):
     """
     登录 Bilibili 账号，并保存登录状态到对应的 JSON 文件。
     
