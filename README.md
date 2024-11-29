@@ -6,7 +6,7 @@
 ├── README.md
 ├── data.json
 ├── main.py
-├─ auth
+├── auth
 └── platforms
 ```
 

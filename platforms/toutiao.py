@@ -66,6 +66,7 @@ def upload_video(page, video_path, title, tags, cover_path):
             tag_input = page.locator('input.arco-input-tag-input')
             tag_input.click()
             tag_input.fill(tag)
+            time.sleep(1)
             tag_input.press("Enter")
             time.sleep(1)
             tag_input.press("Enter")
@@ -142,7 +143,12 @@ def upload_cover_image(page, image_path):
     confirm_cover_image(page)
 
 def confirm_cover_image(page):
-    # 1. 点击“确定”按钮，确认封面图片
+    # 1. 检查是否需要裁剪图片
+    crop_button = page.locator('.clip-btn-content',has_text="完成裁剪")
+    if crop_button.count() > 0 and crop_button.is_visible():
+        crop_button.click()
+        print("完成裁剪")
+    time.sleep(2)
     confirm_button = page.locator('button.btn-l.btn-sure.ml16', has_text="确定")
     if not confirm_button.is_enabled():
         raise Exception("封面确认按钮不可点击，请检查上传状态")

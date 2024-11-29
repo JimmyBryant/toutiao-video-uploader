@@ -119,7 +119,7 @@ def main():
                 browser.close()
 
     # 使用线程池并发处理任务
-    max_threads = 3  # 最大并发任务数
+    max_threads = 2  # 最大并发任务数
     with ThreadPoolExecutor(max_threads) as executor:
         executor.map(process_task, tasks)
 
