@@ -5,7 +5,7 @@ import time
 def login(page):
     """手动扫码登录"""
     # 打开登录页面
-    login_url = "https://mp.toutiao.com/auth/page/login?redirect_url=JTJGcHJvZmlsZV92NCUyRnhpZ3VhJTJGdXBsb2FkLXZpZGVv"
+    login_url = "https://creator.douyin.com/"
     page.goto(login_url)
     page.wait_for_load_state("load")
     print("请手动扫码登录...")
@@ -14,17 +14,15 @@ def login(page):
     while True:
         print("等待用户扫码并完成登录...")
         time.sleep(3)
-        # 打印当前 URL 以观察变化
-        print(f"当前页面 URL: {page.url}")
         # 判断登录完成：通过 URL 或页面元素
-        if "upload-video" in page.url:  # 登录成功后跳转页面
-            break
-        if page.locator("text=上传视频").is_visible():  # 或者检查某个标志性元素
+        if page.locator("text=发布视频").count()>0:  # 或者检查某个标志性元素
+            # 打印当前 URL 以观察变化
+            print(f"当前页面 URL: {page.url}")
             break
 
     print("登录成功！")
 
-def upload_video(page, video_path, title, tags, cover_path):
+def upload_video(page, video_path, title, desc, tags, cover_path):
     """
     上传视频到今日头条
     :param page: Playwright Page 对象
@@ -34,41 +32,49 @@ def upload_video(page, video_path, title, tags, cover_path):
     :param cover_path: 封面图片路径
     """
     # 打开发布页面
-    page.goto("https://mp.toutiao.com/profile_v4/xigua/upload-video")
+    page.goto("https://creator.douyin.com/creator-micro/content/upload")
     page.wait_for_load_state("load")
     print("已进入发布页面")
+    page.wait_for_selector('.semi-tabs.semi-tabs-top')
     # 上传视频文件
-    video_upload_input = page.locator('input[type="file"]').nth(0)  # 视频上传输入框
+    video_upload_input = page.locator('input[type="file"]')  # 视频上传输入框
+    if video_upload_input.count() == 0:
+        raise Exception("未找到视频上传输入框")
     video_upload_input.set_input_files(video_path)
-    print("视频文件已选择")
+    print("视频文件已选择",video_path)
 
     # 输入视频标题
     print("填写视频标题...")
-    title_input = page.wait_for_selector('input[class*="xigua-input"]')
+    page.wait_for_selector('input[class*="semi-input"]')
+    title_input = page.locator('input[class*="semi-input"]').first
     title_input.fill(title)
     print("标题填写完成")
 
+    # 输入视频描述
+    # print("填写视频描述...")
+    # page.wait_for_selector('textarea[class*="semi-textarea"]')
+
     # 输入视频标签
-    if tags:
-        print("填写视频标签...")
-        for tag in tags:
-            tag_input = page.locator('input.arco-input-tag-input')
-            tag_input.click()
-            tag_input.fill(tag)
-            time.sleep(1)
-            tag_input.press("Enter")
-            time.sleep(1)
-            tag_input.press("Enter")
-            print(f"添加标签: {tag}")
+    # if tags:
+    #     print("填写视频标签...")
+    #     for tag in tags:
+    #         tag_input = page.locator('input.arco-input-tag-input')
+    #         tag_input.click()
+    #         tag_input.fill(tag)
+    #         time.sleep(1)
+    #         tag_input.press("Enter")
+    #         time.sleep(1)
+    #         tag_input.press("Enter")
+    #         print(f"添加标签: {tag}")
 
     # 等待视频上传成功
     wait_for_upload_progress(page)
 
     # 上传封面图片
-    print("开始上传封面...")
-    page.locator('.fake-upload-trigger').click()  # 点击封面上传按钮
-    page.locator('li:has-text("本地上传")').click()  # 选择本地上传
-    upload_cover_image(page,cover_path)
+    # print("开始上传封面...")
+    # page.locator('.fake-upload-trigger').click()  # 点击封面上传按钮
+    # page.locator('li:has-text("本地上传")').click()  # 选择本地上传
+    # upload_cover_image(page,cover_path)
 
     # 发布视频
     publish_video(page)
@@ -87,15 +93,10 @@ def wait_for_upload_progress(page, no_change_timeout=30):
     while True:
         try:
             # 获取上传进度文本
-            progress_element = page.locator("span.percent")
+            progress_element = page.locator("div[class*='upload-progress-inner']>span[class*='text']")
             if progress_element.is_visible():
                 current_progress = progress_element.inner_text().strip()
-                print(f"头条视频上传进度: {current_progress}")
-
-                # 检查是否上传成功
-                if "上传成功" in current_progress:
-                    print("视频上传成功")
-                    return
+                print(f"抖音视频上传进度: {current_progress}")
 
                 # 检查进度是否变化
                 if current_progress != last_progress:
@@ -104,7 +105,11 @@ def wait_for_upload_progress(page, no_change_timeout=30):
                 elif time.time() - last_change_time > no_change_timeout:
                     raise TimeoutError("上传进度超过30秒无变化，可能上传失败")
             else:
-                print("等待上传进度显示...")
+                if last_progress:
+                    print("上传进度无变化，上传成功")
+                    return
+                else:
+                    print("等待上传进度显示...")
 
         except Exception as e:
             print(f"检查上传进度时出错: {e}")
@@ -155,7 +160,7 @@ def confirm_cover_image(page):
 def publish_video(page):
     # 1. 定位发布按钮
     publish_button = page.locator(
-        'button.byte-btn.byte-btn-primary.byte-btn-size-large.byte-btn-shape-square.action-footer-btn.submit',
+        'button[class*="primary-"]',
         has_text="发布"
     )
     
@@ -168,19 +173,12 @@ def publish_video(page):
     print("发布按钮已点击")
     
     # 4. 等待跳转到任意一个成功页面
-    expected_urls = [
-        "https://mp.toutiao.com/profile_v4/xigua/content-manage-v2",
-        "https://mp.toutiao.com/profile_v4/xigua/small-video"
-    ]
-    # 使用 JavaScript 脚本检查是否跳转到目标页面
-    page.wait_for_function(
-        f"""
-        () => {{
-            const url = window.location.href;
-            return {str(expected_urls)}.includes(url);
-        }}
-        """,
-        timeout=60000  # 等待跳转完成，超时设置为 60 秒
-    )
-    print(f"页面跳转成功，当前 URL: {page.url}")
+    try:
+        page.wait_for_url(
+            "https://creator.douyin.com/creator-micro/content/manage*",
+            timeout=60000  # 设置超时时间，例如 60 秒
+        )
+        print("发布成功，页面已跳转到内容管理页面")
+    except Exception as e:
+        print(f"发布失败或页面未跳转，错误: {e}")
         

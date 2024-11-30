@@ -6,6 +6,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 from platforms.toutiao import login as toutiao_login, upload_video as toutiao_upload_video
 from platforms.bilibili import login as bilibili_login, upload_video as bilibili_upload_video
+from platforms.douyin import login as douyin_login, upload_video as douyin_upload_video
 
 # 配置目录
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # 获取当前脚本所在目录
@@ -14,7 +15,7 @@ DATA_FILE = os.path.join(BASE_DIR, "./data.json")
 LOG_FILE = os.path.join(BASE_DIR, "error.log")
 os.makedirs(AUTH_DIR, exist_ok=True)  # 自动创建目录（如果不存在）
 # 支持的平台
-SUPPORTED_PLATFORMS = {"toutiao", "bilibili"}
+SUPPORTED_PLATFORMS = {"toutiao", "bilibili", "douyin"}
 
 
 # 登录函数
@@ -24,6 +25,8 @@ def login(platform, context):
         toutiao_login(page)
     elif platform == "bilibili":
         bilibili_login(page)
+    elif platform == "douyin":
+        douyin_login(page)
     else:
         raise ValueError(f"未支持的平台: {platform}")
     page.close()
@@ -41,6 +44,15 @@ def publish(platform, task, context):
         )
     elif platform == "bilibili":
         bilibili_upload_video(
+            page=page,
+            video_path=task["video_path"],
+            title=task["title"],
+            desc=task["desc"],  # 传递简介信息
+            tags=task["tags"],
+            cover_path=task["cover_path"],
+        )
+    elif platform == "douyin":
+        douyin_upload_video(
             page=page,
             video_path=task["video_path"],
             title=task["title"],
