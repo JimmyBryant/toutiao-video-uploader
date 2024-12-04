@@ -70,6 +70,7 @@ def upload_video(page, video_path, title, tags, cover_path):
     page.locator('li:has-text("本地上传")').click()  # 选择本地上传
     upload_cover_image(page,cover_path)
 
+    time.sleep(2)
     # 发布视频
     publish_video(page)
 
@@ -166,21 +167,15 @@ def publish_video(page):
     # 3. 点击发布按钮
     publish_button.click()
     print("发布按钮已点击")
-    
+
     # 4. 等待跳转到任意一个成功页面
-    expected_urls = [
-        "https://mp.toutiao.com/profile_v4/xigua/content-manage-v2",
-        "https://mp.toutiao.com/profile_v4/xigua/small-video"
-    ]
-    # 使用 JavaScript 脚本检查是否跳转到目标页面
-    page.wait_for_function(
-        f"""
-        () => {{
-            const url = window.location.href;
-            return {str(expected_urls)}.includes(url);
-        }}
-        """,
-        timeout=60000  # 等待跳转完成，超时设置为 60 秒
-    )
-    print(f"页面跳转成功，当前 URL: {page.url}")
+    try:
+        page.wait_for_url(
+            "https://mp.toutiao.com/profile_v4/xigua/content-manage-v2",
+            timeout=60000  # 设置超时时间，例如 60 秒
+        )
+        print("发布成功，页面已跳转到内容管理页面")
+    except Exception as e:
+        print(f"发布失败或页面未跳转，错误: {e}")
+        raise e
         

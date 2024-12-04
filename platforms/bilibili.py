@@ -137,7 +137,7 @@ def upload_video(page, video_path, title, desc, tags=None, cover_path=None):
             else:
                 unchanged_progress_time = 0  # 进度变化，重置计时
                 prev_progress = progress_text
-            print(f"当前上传进度: {progress_text}")
+            print(f"Bilibili当前上传进度: {progress_text}")
         except:
             pass
 

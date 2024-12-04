@@ -79,7 +79,7 @@ def upload_video(page, video_path, title, desc, tags, cover_path):
     # 发布视频
     publish_video(page)
 
-def wait_for_upload_progress(page, no_change_timeout=30):
+def wait_for_upload_progress(page, no_change_timeout=60):
     """
     等待视频上传成功，并监测上传进度是否发生变化。
     如果 30 秒内上传进度无变化，则抛出超时错误。
