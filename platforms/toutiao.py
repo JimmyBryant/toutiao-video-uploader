@@ -133,12 +133,14 @@ def upload_cover_image(page, image_path):
     confirm_cover_image(page)
 
 def confirm_cover_image(page):
+    time.sleep(3)
     # 1. 检查是否需要裁剪图片
     crop_button = page.locator('.clip-btn-content',has_text="完成裁剪")
     if crop_button.count() > 0 and crop_button.is_visible():
         crop_button.click()
         print("完成裁剪")
-    time.sleep(2)
+    print('完成裁剪按钮数量：',crop_button.count())
+    time.sleep(3)
     confirm_button = page.locator('button.btn-l.btn-sure.ml16', has_text="确定")
     if not confirm_button.is_enabled():
         raise Exception("封面确认按钮不可点击，请检查上传状态")

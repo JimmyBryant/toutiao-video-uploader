@@ -2,3 +2,4 @@ auth/
 data/
 *.log
 __pycache__/
+data.json

@@ -1,3 +1,4 @@
+
 import os
 import json
 from concurrent.futures import ThreadPoolExecutor
@@ -8,10 +9,12 @@ from platforms.bilibili import login as bilibili_login, upload_video as bilibili
 from platforms.douyin import login as douyin_login, upload_video as douyin_upload_video
 from pymongo import MongoClient
 
+
 # MongoDB 配置
 MONGO_URI = "mongodb://localhost:27017/"
 DATABASE_NAME = "video_tasks"
 COLLECTION_NAME = "tasks"
+
 
 # 连接 MongoDB
 client = MongoClient(MONGO_URI)
@@ -79,7 +82,7 @@ def process_task(task):
     处理单个任务的函数
     """
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)  # 每个线程独立启动浏览器实例
+        browser = p.chromium.launch(headless=True)  # 每个线程独立启动浏览器实例
 
         try:
             platform = task["platform"]
@@ -140,13 +143,14 @@ def process_task(task):
             browser.close()
 # 主函数
 def main():
-    now = datetime.now(timezone.utc)  # 使用推荐方式获取当前 UTC 时间
-
+    # now = datetime.now(local_timezone) 
+    now = datetime.now().replace(tzinfo=None)  # 移除时区信息
+    print("当前时间:", now)
     tasks = list(collection.find({
         "state": 0,  # 未开始
         "$or": [
-            {"scheduled_time": {"$exists": False}},  # 没有设置发布时间
-            {"scheduled_time": {"$lte": now}}       # 设置的发布时间小于等于当前时间
+            {"schedule_time": {"$exists": False}},  # 没有设置发布时间
+            {"schedule_time": {"$lte": now}}       # 设置的发布时间小于等于当前时间
         ]
     }))
 
