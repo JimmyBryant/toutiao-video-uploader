@@ -8,7 +8,7 @@ from platforms.toutiao import login as toutiao_login, upload_video as toutiao_up
 from platforms.bilibili import login as bilibili_login, upload_video as bilibili_upload_video
 from platforms.douyin import login as douyin_login, upload_video as douyin_upload_video
 from pymongo import MongoClient
-
+import pytz
 
 # MongoDB 配置
 MONGO_URI = "mongodb://localhost:27017/"
@@ -143,8 +143,12 @@ def process_task(task):
             browser.close()
 # 主函数
 def main():
-    # now = datetime.now(local_timezone) 
-    now = datetime.now().replace(tzinfo=None)  # 移除时区信息
+    local_timezone= pytz.timezone("Asia/Shanghai")
+    utc_time = datetime.now(timezone.utc)
+    local_time = utc_time.astimezone(local_timezone)
+    now = local_time
+    # now = datetime.now().replace(tzinfo=None)  # 移除时区信息
+    print("UTC时间:", utc_time)
     print("当前时间:", now)
     tasks = list(collection.find({
         "state": 0,  # 未开始
@@ -153,7 +157,6 @@ def main():
             {"schedule_time": {"$lte": now}}       # 设置的发布时间小于等于当前时间
         ]
     }))
-
     print("任务总数：",len(tasks))
     # 使用线程池并发处理任务
     max_threads = 2  # 最大并发任务数

@@ -69,8 +69,6 @@ def upload_video(page, video_path, title, tags, cover_path):
     page.locator('.fake-upload-trigger').click()  # 点击封面上传按钮
     page.locator('li:has-text("本地上传")').click()  # 选择本地上传
     upload_cover_image(page,cover_path)
-
-    time.sleep(2)
     # 发布视频
     publish_video(page)
 
@@ -132,6 +130,7 @@ def upload_cover_image(page, image_path):
     print(f"封面图片 {image_path} 已设置")
     confirm_cover_image(page)
 
+
 def confirm_cover_image(page):
     time.sleep(3)
     # 1. 检查是否需要裁剪图片
@@ -152,6 +151,8 @@ def confirm_cover_image(page):
     if dialog_confirm_button.is_visible():
         dialog_confirm_button.click()
         print("对话框确认按钮已点击")
+        # 等待一段时间
+        time.sleep(3)
     else:
         raise Exception("未找到对话框的确认按钮")
     
