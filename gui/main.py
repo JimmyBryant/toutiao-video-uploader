@@ -1,71 +1,8 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, Text
 from playwright.sync_api import sync_playwright
-import sqlite3
+from database import initialize_database,fetch_all_users, add_user,update_user, delete_user_by_id,fetch_user_by_id,update_user_group, add_user_group, add_user_to_group, fetch_all_user_groups, fetch_group_members,delete_user_group, save_user_group, fetch_user_group_by_id
 
-DB_FILE = "user_data.db"
-
-def initialize_database():
-    """初始化数据库（仅创建表结构，不影响已有数据）"""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            platform TEXT NOT NULL,
-            username TEXT NOT NULL,
-            login_info TEXT NOT NULL
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-def fetch_all_users():
-    """获取所有用户信息"""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, platform, username,login_info FROM users")
-    users = cursor.fetchall()
-    conn.close()
-    return users
-
-def fetch_user_by_id(user_id):
-    """根据用户 ID 获取用户信息"""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT platform, username, login_info FROM users WHERE id = ?", (user_id,))
-    user_data = cursor.fetchone()
-    conn.close()
-    return user_data
-
-def insert_user(platform, username, login_info):
-    """插入新用户"""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO users (platform, username, login_info) VALUES (?, ?, ?)", 
-                   (platform, username, login_info))
-    conn.commit()
-    conn.close()
-
-def update_user(user_id, platform, username, login_info):
-    """更新用户信息"""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE users 
-        SET platform = ?, username = ?, login_info = ?
-        WHERE id = ?
-    """, (platform, username, login_info, user_id))
-    conn.commit()
-    conn.close()
-
-def delete_user_by_id(user_id):
-    """根据用户 ID 删除用户"""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
-    conn.commit()
-    conn.close()
 
     
 def save_user(platform, username, login_info):
@@ -77,7 +14,7 @@ def save_user(platform, username, login_info):
 
     try:
         # 调用数据库操作函数
-        insert_user(platform, username, login_info)
+        add_user(platform, username, login_info)
         # 保存成功提示
         messagebox.showinfo("保存成功", "用户信息已成功保存！")
     except Exception as e:
@@ -214,6 +151,7 @@ def show_main_menu():
     tk.Button(main_frame, text="发布视频", command=show_publish_video, width=20, height=2).pack(pady=10)
     tk.Button(main_frame, text="查看任务", command=show_tasks, width=20, height=2).pack(pady=10)
     tk.Button(main_frame, text="用户列表", command=show_user_list, width=20, height=2).pack(pady=10)
+    tk.Button(main_frame, text="用户组", command=show_user_groups, width=20, height=2).pack(pady=10)
 
 def show_publish_video():
     """显示发布视频功能界面，左侧显示标签，右侧显示输入框"""
@@ -257,6 +195,215 @@ def show_publish_video():
     back_button = tk.Button(main_frame, text="返回主界面", command=show_main_menu)
     back_button.pack(pady=10)
 
+def show_user_groups():
+    """用户组管理界面"""
+    clear_frame()
+    tk.Label(main_frame, text="用户组管理", font=("Arial", 16)).pack(pady=10)
+
+    # 用户组列表区域
+    group_frame = tk.Frame(main_frame)
+    group_frame.pack(pady=10, fill="x")
+
+    columns = ("组名", "用户数量")
+    group_tree = ttk.Treeview(group_frame, columns=columns, show="headings")
+    group_tree.heading("组名", text="组名")
+    group_tree.heading("用户数量", text="用户数量")
+    # 获取所有用户组并填充列表
+    groups = fetch_all_user_groups()
+    for group in groups:
+        group_id = group["id"]
+        group_name = group["group_name"]
+        members = fetch_group_members(group_id)
+        # 将成员的用户名提取为字符串
+        members_str = ", ".join([f"{member[1]}:{member[2]}" for member in members])  # 假设第2列是用户名
+        group_tree.insert("", "end", values=(group_name, members_str))
+
+    group_tree.pack(fill="both", expand=True)
+
+    # 按钮功能
+    def add_group():
+        show_add_user_group()
+
+    def edit_group():
+        selected_item = group_tree.selection()
+        if not selected_item:
+            messagebox.showwarning("警告", "请选择一个用户组进行编辑！")
+            return
+        group_id = group_tree.item(selected_item, "values")[0]  # 假设第0列是组ID
+        show_edit_group(group_id)
+
+    def delete_group():
+        selected_item = group_tree.selection()
+        if not selected_item:
+            messagebox.showwarning("警告", "请选择一个用户组进行删除！")
+            return
+        group_id = group_tree.item(selected_item, "values")[0]  # 假设第0列是组ID
+        if messagebox.askyesno("确认", "确定删除该用户组吗？"):
+            delete_user_group(group_id)
+            show_user_groups()
+
+    # 底部按钮区域
+    bottom_frame = tk.Frame(main_frame)
+    bottom_frame.pack(pady=10)
+
+    create_button(bottom_frame, "添加用户组", "default", command=add_group).pack(side="left", padx=10)
+    create_button(bottom_frame, "编辑用户组", "default", command=edit_group).pack(side="left", padx=10)
+    create_button(bottom_frame, "删除用户组", "default", command=delete_group).pack(side="left", padx=10)
+    create_button(bottom_frame, "返回主菜单", "default", command=show_main_menu).pack(side="left", padx=10)
+def show_add_user_group():
+    """显示添加用户组界面"""
+    clear_frame()
+    tk.Label(main_frame, text="添加用户组", font=("Arial", 16)).pack(pady=10)
+
+    # 用户组表单
+    form_frame = tk.Frame(main_frame)
+    form_frame.pack(pady=10, padx=20)
+
+    # 用户组名称输入
+    tk.Label(form_frame, text="用户组名称:", anchor="w", width=15).grid(row=0, column=0, pady=5, sticky="w")
+    group_name_entry = custom_entry(form_frame)
+    group_name_entry.grid(row=0, column=1, pady=5, sticky="ew")
+
+    # 用户多选框
+    tk.Label(form_frame, text="选择用户:", anchor="w", width=15).grid(row=1, column=0, pady=5, sticky="w")
+    users_listbox = tk.Listbox(form_frame, selectmode="multiple", height=10, width=30)
+    users_listbox.grid(row=1, column=1, pady=5, sticky="ew")
+
+    # 加载用户数据
+    users = fetch_all_users()
+    for user in users:
+        user_id, platform, username, *_ = user
+        users_listbox.insert(tk.END, f"{username} ({platform})")
+
+    # 底部按钮区域
+    bottom_frame = tk.Frame(main_frame)
+    bottom_frame.pack(pady=10)
+
+    # 保存用户组按钮
+    create_button(
+        bottom_frame, "保存用户组",
+        "default",
+        command=lambda: save_user_group_and_refresh(group_name_entry, users_listbox, users)
+    ).pack(side="left", padx=10)
+
+    # 返回按钮
+    create_button(
+        bottom_frame, "返回",
+        "default",
+        command=show_main_menu
+    ).pack(side="left", padx=10)
+
+
+def save_user_group_and_refresh(group_name_entry, users_listbox, users):
+    """保存用户组并刷新界面"""
+    group_name = group_name_entry.get().strip()
+    selected_indices = users_listbox.curselection()
+    selected_users = [users[i][0] for i in selected_indices]  # 获取选中用户的ID
+
+    if not group_name:
+        messagebox.showerror("错误", "用户组名称不能为空")
+        return
+    if not selected_users:
+        messagebox.showerror("错误", "至少选择一个用户")
+        return
+
+    save_user_group(group_name, selected_users)  # 保存到数据库
+    messagebox.showinfo("成功", f"用户组 '{group_name}' 已保存")
+    show_main_menu()  # 返回主界面
+
+def show_add_group():
+    """添加用户组界面"""
+    clear_frame()
+    tk.Label(main_frame, text="添加用户组", font=("Arial", 16)).pack(pady=10)
+
+    # 表单区域
+    form_frame = tk.Frame(main_frame)
+    form_frame.pack(pady=10, padx=20)
+
+    tk.Label(form_frame, text="组名:", anchor="w", width=15).grid(row=0, column=0, pady=5, sticky="w")
+    group_name_entry = custom_entry(form_frame)
+    group_name_entry.grid(row=0, column=1, pady=5, sticky="ew")
+
+    tk.Label(form_frame, text="用户选择:", anchor="w", width=15).grid(row=1, column=0, pady=5, sticky="nw")
+    user_listbox = tk.Listbox(form_frame, selectmode="multiple", height=10, width=30)
+    user_listbox.grid(row=1, column=1, pady=5, sticky="ew")
+
+    # 假设 fetch_all_users() 返回 [(user_id, username), ...]
+    for user_id, username in fetch_all_users():
+        user_listbox.insert("end", f"{username} ({user_id})")
+
+    # 保存用户组
+    def save_group():
+        group_name = group_name_entry.get()
+        selected_users = [user_listbox.get(i) for i in user_listbox.curselection()]
+        if not group_name:
+            messagebox.showwarning("警告", "组名不能为空！")
+            return
+        if not selected_users:
+            messagebox.showwarning("警告", "请至少选择一个用户！")
+            return
+        save_user_group(group_name, selected_users)
+        show_user_groups()
+
+    # 底部按钮区域
+    bottom_frame = tk.Frame(main_frame)
+    bottom_frame.pack(pady=10)
+
+    create_button(bottom_frame, "保存", "default", command=save_group).pack(side="left", padx=10)
+    create_button(bottom_frame, "返回", "default", command=show_user_groups).pack(side="left", padx=10)
+
+def show_edit_group(group_id):
+    """编辑用户组界面"""
+    clear_frame()
+    tk.Label(main_frame, text="编辑用户组", font=("Arial", 16)).pack(pady=10)
+
+    # 获取用户组信息
+    group = fetch_user_group_by_id(group_id)
+    if not group:
+        messagebox.showerror("错误", "用户组不存在")
+        show_user_groups()
+        return
+
+    group_name, users = group
+
+    # 表单区域
+    form_frame = tk.Frame(main_frame)
+    form_frame.pack(pady=10, padx=20)
+
+    tk.Label(form_frame, text="组名:", anchor="w", width=15).grid(row=0, column=0, pady=5, sticky="w")
+    group_name_entry = custom_entry(form_frame)
+    group_name_entry.grid(row=0, column=1, pady=5, sticky="ew")
+    group_name_entry.insert(0, group_name)
+
+    tk.Label(form_frame, text="用户选择:", anchor="w", width=15).grid(row=1, column=0, pady=5, sticky="nw")
+    user_listbox = tk.Listbox(form_frame, selectmode="multiple", height=10, width=30)
+    user_listbox.grid(row=1, column=1, pady=5, sticky="ew")
+
+    all_users = fetch_all_users()
+    for user_id, username in all_users:
+        user_listbox.insert("end", f"{username} ({user_id})")
+        if user_id in users:
+            user_listbox.selection_set(all_users.index((user_id, username)))
+
+    # 保存编辑后的用户组
+    def save_edited_group():
+        new_group_name = group_name_entry.get()
+        selected_users = [user_listbox.get(i) for i in user_listbox.curselection()]
+        if not new_group_name:
+            messagebox.showwarning("警告", "组名不能为空！")
+            return
+        if not selected_users:
+            messagebox.showwarning("警告", "请至少选择一个用户！")
+            return
+        update_user_group(group_id, new_group_name, selected_users)
+        show_user_groups()
+
+    # 底部按钮区域
+    bottom_frame = tk.Frame(main_frame)
+    bottom_frame.pack(pady=10)
+
+    create_button(bottom_frame, "保存修改", "default", command=save_edited_group).pack(side="left", padx=10)
+    create_button(bottom_frame, "返回", "default", command=show_user_groups).pack(side="left", padx=10)
 
 def show_add_user():
     """显示添加用户功能界面"""
@@ -279,8 +426,9 @@ def show_add_user():
     username_entry.grid(row=1, column=1, pady=5, sticky="ew")
 
     # Cookie 显示框
-    cookie_textarea = Text(main_frame, height=10, width=50, wrap="word", state="normal")
-    cookie_textarea.grid(row=2, column=0, pady=10, padx=20, columnspan=2)
+    tk.Label(form_frame, text="Cookie 信息:", anchor="w", width=15).grid(row=2, column=0, pady=5, sticky="w")
+    cookie_textarea = Text(form_frame, height=10, width=50, wrap="word", state="normal")
+    cookie_textarea.grid(row=2, column=1, pady=5, sticky="ew")
 
     # 按钮状态管理
     browser_dict = {}
@@ -288,16 +436,16 @@ def show_add_user():
     # 获取登录信息按钮
     get_login_button = tk.Button(form_frame, text="获取登录信息", 
                                   command=lambda: open_login_page(platform_combo.get(), get_login_button, save_cookie_button, browser_dict))
-    get_login_button.grid(row=2, column=0, pady=10, padx=10)
+    get_login_button.grid(row=3, column=0, pady=10, padx=10)
 
     # 保存 Cookie 按钮
     save_cookie_button = tk.Button(form_frame, text="保存 Cookie", state="disabled",
                                     command=lambda: save_cookies(browser_dict, save_cookie_button, get_login_button, username_entry, cookie_textarea))
-    save_cookie_button.grid(row=2, column=1, pady=10, padx=10)
+    save_cookie_button.grid(row=3, column=1, pady=10, padx=10)
 
     # 底部按钮区域
     bottom_button_frame = tk.Frame(main_frame)
-    bottom_button_frame.grid(row=3, column=0, pady=10, columnspan=2)
+    bottom_button_frame.grid(row=4, column=0, pady=10, columnspan=2)
 
     # 保存用户按钮
     create_button(
@@ -307,8 +455,8 @@ def show_add_user():
 
     # 返回发布视频界面按钮
     create_button(
-        bottom_button_frame, "返回发布视频", "default",
-        command=show_publish_video
+        bottom_button_frame, "返回主页", "default",
+        command=show_main_menu
     ).grid(row=0, column=1, padx=10)
 
 
@@ -422,7 +570,7 @@ def show_user_list():
 def show_edit_user(user_id):
     """编辑用户信息"""
     clear_frame()
-    tk.Label(main_frame, text="编辑用户", font=("Arial", 16)).pack(pady=10)
+    tk.Label(main_frame, text="编辑用户", font=("Arial", 16)).grid(row=0, column=0, pady=10, columnspan=2)
 
     # 获取用户信息
     user = fetch_user_by_id(user_id)
@@ -435,7 +583,7 @@ def show_edit_user(user_id):
 
     # 编辑表单
     form_frame = tk.Frame(main_frame)
-    form_frame.pack(pady=10, padx=20)
+    form_frame.grid(row=1, column=0, pady=10, padx=20, columnspan=2)
 
     tk.Label(form_frame, text="用户平台:", anchor="w", width=15).grid(row=0, column=0, pady=5, sticky="w")
     platform_combo = ttk.Combobox(form_frame, values=["Bilibili", "Toutiao", "Douyin", "YouTube", "TikTok"])
@@ -447,28 +595,42 @@ def show_edit_user(user_id):
     username_entry.grid(row=1, column=1, pady=5, sticky="ew")
     username_entry.insert(0, username)
 
+    # Cookie 显示框
     tk.Label(form_frame, text="Cookie 信息:", anchor="w", width=15).grid(row=2, column=0, pady=5, sticky="w")
-    cookie_textarea = tk.Text(form_frame, height=5, width=30)
+    cookie_textarea = tk.Text(form_frame, height=10, width=50, wrap="word", state="normal")
     cookie_textarea.grid(row=2, column=1, pady=5, sticky="ew")
     cookie_textarea.insert("1.0", login_info)
 
+    # 按钮状态管理
+    browser_dict = {}
+
+    # 获取登录信息按钮
+    get_login_button = tk.Button(form_frame, text="更新登录信息", 
+                                  command=lambda: open_login_page(platform_combo.get(), get_login_button, save_cookie_button, browser_dict))
+    get_login_button.grid(row=3, column=0, pady=10, padx=10)
+
+    # 保存 Cookie 按钮
+    save_cookie_button = tk.Button(form_frame, text="保存 Cookie", state="disabled",
+                                    command=lambda: save_cookies(browser_dict, save_cookie_button, get_login_button, username_entry, cookie_textarea))
+    save_cookie_button.grid(row=3, column=1, pady=10, padx=10)
+
     # 底部按钮区域
     bottom_frame = tk.Frame(main_frame)
-    bottom_frame.pack(pady=10)
+    bottom_frame.grid(row=4, column=0, pady=10, columnspan=2)
 
     create_button(
         bottom_frame, "保存修改",
-        button_type="default",
+        "default",
         command=lambda: save_user_edits(
             user_id, platform_combo.get(), username_entry.get(), cookie_textarea.get("1.0", "end").strip()
         )
-    ).pack(side="left", padx=10)
+    ).grid(row=0, column=0, padx=10)
 
     create_button(
         bottom_frame, "返回用户列表",
-        button_type="default",
+        "default",
         command=show_user_list
-    ).pack(side="right", padx=10)
+    ).grid(row=0, column=1, padx=10)
 
 
 def save_user_edits(user_id, platform, username, login_info):
