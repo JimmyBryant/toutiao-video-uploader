@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, Text
 from playwright.sync_api import sync_playwright
-from database import initialize_database,fetch_all_users, add_user,update_user, delete_user_by_id,fetch_user_by_id,update_user_group, add_user_group, add_user_to_group, fetch_all_user_groups, fetch_group_members,delete_user_group, save_user_group, fetch_user_group_by_id
+from database import initialize_database,fetch_all_users, add_user,update_user, delete_user_by_id,fetch_user_by_id,update_user_group, add_user_group, update_user_group, fetch_all_user_groups, fetch_group_members,delete_user_group,  fetch_user_group_by_id
 
 
     
@@ -204,8 +204,9 @@ def show_user_groups():
     group_frame = tk.Frame(main_frame)
     group_frame.pack(pady=10, fill="x")
 
-    columns = ("组名", "用户数量")
+    columns = ("ID","组名", "用户数量")
     group_tree = ttk.Treeview(group_frame, columns=columns, show="headings")
+    group_tree.heading("ID", text="ID")
     group_tree.heading("组名", text="组名")
     group_tree.heading("用户数量", text="用户数量")
     # 获取所有用户组并填充列表
@@ -215,8 +216,8 @@ def show_user_groups():
         group_name = group["group_name"]
         members = fetch_group_members(group_id)
         # 将成员的用户名提取为字符串
-        members_str = ", ".join([f"{member[1]}:{member[2]}" for member in members])  # 假设第2列是用户名
-        group_tree.insert("", "end", values=(group_name, members_str))
+        members_str = ", ".join([f"{member[2]}({member[1]})" for member in members])  # 假设第2列是用户名
+        group_tree.insert("", "end", values=(group_id, group_name, members_str))
 
     group_tree.pack(fill="both", expand=True)
 
@@ -230,7 +231,7 @@ def show_user_groups():
             messagebox.showwarning("警告", "请选择一个用户组进行编辑！")
             return
         group_id = group_tree.item(selected_item, "values")[0]  # 假设第0列是组ID
-        show_edit_group(group_id)
+        show_edit_user_group(group_id)
 
     def delete_group():
         selected_item = group_tree.selection()
@@ -281,20 +282,20 @@ def show_add_user_group():
 
     # 保存用户组按钮
     create_button(
-        bottom_frame, "保存用户组",
+        bottom_frame, "创建用户组",
         "default",
-        command=lambda: save_user_group_and_refresh(group_name_entry, users_listbox, users)
+        command=lambda: add_user_group_and_refresh(group_name_entry, users_listbox, users)
     ).pack(side="left", padx=10)
 
     # 返回按钮
     create_button(
         bottom_frame, "返回",
         "default",
-        command=show_main_menu
+        command=show_user_groups
     ).pack(side="left", padx=10)
 
 
-def save_user_group_and_refresh(group_name_entry, users_listbox, users):
+def add_user_group_and_refresh(group_name_entry, users_listbox, users):
     """保存用户组并刷新界面"""
     group_name = group_name_entry.get().strip()
     selected_indices = users_listbox.curselection()
@@ -307,52 +308,12 @@ def save_user_group_and_refresh(group_name_entry, users_listbox, users):
         messagebox.showerror("错误", "至少选择一个用户")
         return
 
-    save_user_group(group_name, selected_users)  # 保存到数据库
+    add_user_group(group_name, selected_users)  # 保存到数据库
     messagebox.showinfo("成功", f"用户组 '{group_name}' 已保存")
-    show_main_menu()  # 返回主界面
+    show_user_groups()  # 返回user groups 界面
 
-def show_add_group():
-    """添加用户组界面"""
-    clear_frame()
-    tk.Label(main_frame, text="添加用户组", font=("Arial", 16)).pack(pady=10)
 
-    # 表单区域
-    form_frame = tk.Frame(main_frame)
-    form_frame.pack(pady=10, padx=20)
-
-    tk.Label(form_frame, text="组名:", anchor="w", width=15).grid(row=0, column=0, pady=5, sticky="w")
-    group_name_entry = custom_entry(form_frame)
-    group_name_entry.grid(row=0, column=1, pady=5, sticky="ew")
-
-    tk.Label(form_frame, text="用户选择:", anchor="w", width=15).grid(row=1, column=0, pady=5, sticky="nw")
-    user_listbox = tk.Listbox(form_frame, selectmode="multiple", height=10, width=30)
-    user_listbox.grid(row=1, column=1, pady=5, sticky="ew")
-
-    # 假设 fetch_all_users() 返回 [(user_id, username), ...]
-    for user_id, username in fetch_all_users():
-        user_listbox.insert("end", f"{username} ({user_id})")
-
-    # 保存用户组
-    def save_group():
-        group_name = group_name_entry.get()
-        selected_users = [user_listbox.get(i) for i in user_listbox.curselection()]
-        if not group_name:
-            messagebox.showwarning("警告", "组名不能为空！")
-            return
-        if not selected_users:
-            messagebox.showwarning("警告", "请至少选择一个用户！")
-            return
-        save_user_group(group_name, selected_users)
-        show_user_groups()
-
-    # 底部按钮区域
-    bottom_frame = tk.Frame(main_frame)
-    bottom_frame.pack(pady=10)
-
-    create_button(bottom_frame, "保存", "default", command=save_group).pack(side="left", padx=10)
-    create_button(bottom_frame, "返回", "default", command=show_user_groups).pack(side="left", padx=10)
-
-def show_edit_group(group_id):
+def show_edit_user_group(group_id):
     """编辑用户组界面"""
     clear_frame()
     tk.Label(main_frame, text="编辑用户组", font=("Arial", 16)).pack(pady=10)
@@ -364,8 +325,9 @@ def show_edit_group(group_id):
         show_user_groups()
         return
 
-    group_name, users = group
-
+    group_name = group['group_name']
+    members = group['members']
+    users = [user_id for user_id, _, _ in members]
     # 表单区域
     form_frame = tk.Frame(main_frame)
     form_frame.pack(pady=10, padx=20)
@@ -376,33 +338,40 @@ def show_edit_group(group_id):
     group_name_entry.insert(0, group_name)
 
     tk.Label(form_frame, text="用户选择:", anchor="w", width=15).grid(row=1, column=0, pady=5, sticky="nw")
-    user_listbox = tk.Listbox(form_frame, selectmode="multiple", height=10, width=30)
-    user_listbox.grid(row=1, column=1, pady=5, sticky="ew")
+    users_listbox = tk.Listbox(form_frame, selectmode="multiple", height=10, width=30)
+    users_listbox.grid(row=1, column=1, pady=5, sticky="ew")
 
     all_users = fetch_all_users()
-    for user_id, username in all_users:
-        user_listbox.insert("end", f"{username} ({user_id})")
+    for user in all_users:
+        user_id, platform, username, *_ = user
+        users_listbox.insert("end", f"{username} ({platform})")
         if user_id in users:
-            user_listbox.selection_set(all_users.index((user_id, username)))
+            # 查找 user_id 对应的索引
+            index = next((i for i, u in enumerate(all_users) if u[0] == user_id), None)
+            if index is not None:
+                users_listbox.selection_set(index)
 
     # 保存编辑后的用户组
-    def save_edited_group():
-        new_group_name = group_name_entry.get()
-        selected_users = [user_listbox.get(i) for i in user_listbox.curselection()]
+    def save_edited_group(group_id,group_name_entry, users_listbox, users):
+        new_group_name = group_name_entry.get().strip()
+        selected_indices = users_listbox.curselection()
+        selected_users = [users[i][0] for i in selected_indices]  # 获取选中用户的ID
         if not new_group_name:
             messagebox.showwarning("警告", "组名不能为空！")
             return
         if not selected_users:
             messagebox.showwarning("警告", "请至少选择一个用户！")
             return
+        print('更新group',group_id,new_group_name,selected_users)
         update_user_group(group_id, new_group_name, selected_users)
+        messagebox.showinfo("成功", "用户组已更新")
         show_user_groups()
 
     # 底部按钮区域
     bottom_frame = tk.Frame(main_frame)
     bottom_frame.pack(pady=10)
 
-    create_button(bottom_frame, "保存修改", "default", command=save_edited_group).pack(side="left", padx=10)
+    create_button(bottom_frame, "保存", "default", command=lambda: save_edited_group(group_id,group_name_entry, users_listbox, all_users)).pack(side="left", padx=10)
     create_button(bottom_frame, "返回", "default", command=show_user_groups).pack(side="left", padx=10)
 
 def show_add_user():

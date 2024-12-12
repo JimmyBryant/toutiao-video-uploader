@@ -86,28 +86,28 @@ def update_user(user_id, platform, username, login_info):
     conn.commit()
     conn.close()
 
-
-# 用户组表相关操作
-def add_user_group(group_name):
+def delete_user_group(group_id):
+    """
+    删除用户组及其成员
+    :param group_id: 用户组ID
+    """
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
+
     try:
-        cursor.execute("""
-            INSERT INTO user_groups (group_name) VALUES (?)
-        """, (group_name,))
+        # 删除用户组成员
+        cursor.execute("DELETE FROM user_group_members WHERE group_id = ?", (group_id,))
+        
+        # 删除用户组
+        cursor.execute("DELETE FROM user_groups WHERE id = ?", (group_id,))
+
         conn.commit()
-    except sqlite3.IntegrityError:
-        print(f"用户组 '{group_name}' 已存在")
+        print(f"用户组 {group_id} 已删除")
+    except sqlite3.Error as e:
+        print(f"删除用户组失败: {e}")
     finally:
         conn.close()
 
-
-def delete_user_group(group_id):
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM user_groups WHERE id = ?", (group_id,))
-    conn.commit()
-    conn.close()
 
 
 def fetch_all_user_groups():
@@ -168,7 +168,7 @@ def fetch_group_members(group_id):
     conn.close()
     return members
 
-def save_user_group(group_name, selected_users):
+def add_user_group(group_name, selected_users):
     """
     保存用户组及其成员
     :param group_name: 用户组名称
@@ -194,6 +194,34 @@ def save_user_group(group_name, selected_users):
     finally:
         conn.close()
 
+def update_user_group(group_id, new_group_name, selected_users):
+    """
+    更新用户组及其成员
+    :param group_id: 用户组ID
+    :param new_group_name: 新的用户组名称
+    :param selected_users: 用户ID列表
+    """
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    try:
+        # 更新用户组名称
+        cursor.execute("UPDATE user_groups SET group_name = ? WHERE id = ?", (new_group_name, group_id))
+
+        # 清除现有的用户组成员
+        cursor.execute("DELETE FROM user_group_members WHERE group_id = ?", (group_id,))
+
+        # 添加新的用户到用户组
+        for user_id in selected_users:
+            cursor.execute("""
+                INSERT INTO user_group_members (group_id, user_id) VALUES (?, ?)
+            """, (group_id, user_id))
+
+        conn.commit()
+    except sqlite3.IntegrityError as e:
+        print(f"更新用户组失败: {e}")
+    finally:
+        conn.close()
 
 def fetch_user_group_by_id(group_id):
     """
