@@ -37,6 +37,22 @@ def initialize_database():
         )
     """)
 
+    # 创建 video_tasks 表
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS video_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            video_title TEXT,
+            video_desc TEXT,
+            video_path TEXT,
+            cover_path TEXT,
+            video_tags TEXT,
+            user_group TEXT,
+            user TEXT, 
+            scheduled_time TEXT
+            status INTEGER DEFAULT 0
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -119,6 +135,14 @@ def fetch_all_user_groups():
     # 将元组转换为字典
     return [{"id": group[0], "group_name": group[1]} for group in groups]
 
+def fetch_all_user_group_names():
+    """获取所有用户组名称"""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT group_name FROM user_groups")
+    group_names = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return group_names
 
 def update_user_group(group_id, new_name):
     conn = sqlite3.connect(DB_FILE)
@@ -256,3 +280,109 @@ def fetch_user_group_by_id(group_id):
         "group_name": group[1],
         "members": members
     }
+
+def add_video_task(video_title, video_description, video_path, cover_path, video_tags, user_group, scheduled_time):
+    """创建视频任务"""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            INSERT INTO video_tasks (video_title, video_description, video_path, cover_path, video_tags, user_group, scheduled_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (video_title, video_description, video_path, cover_path, video_tags, user_group, scheduled_time))
+
+        conn.commit()
+    except sqlite3.IntegrityError as e:
+        print(f"创建视频任务失败: {e}")
+    finally:
+        conn.close()
+
+def fetch_all_video_tasks():
+    """获取所有视频任务"""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM video_tasks")
+    tasks = cursor.fetchall()
+
+    conn.close()
+    return tasks
+
+def fetch_video_task_by_id(task_id):
+    """根据任务ID获取视频任务"""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM video_tasks WHERE id = ?", (task_id,))
+    task = cursor.fetchone()
+
+    conn.close()
+    return task
+
+def update_video_task(task_id, title=None, description=None, video_path=None, cover_path=None, video_tags=None, user_group=None, scheduled_time=None):
+    """更新视频任务"""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    # 动态生成更新语句
+    set_clauses = []
+    params = []
+    
+    if title:
+        set_clauses.append("title = ?")
+        params.append(title)
+    
+    if description:
+        set_clauses.append("description = ?")
+        params.append(description)
+    
+    if video_path:
+        set_clauses.append("video_path = ?")
+        params.append(video_path)
+    
+    if cover_path:
+        set_clauses.append("cover_path = ?")
+        params.append(cover_path)
+    
+    if video_tags:
+        set_clauses.append("video_tags = ?")
+        params.append(video_tags)
+    
+    if user_group:
+        set_clauses.append("user_group = ?")
+        params.append(user_group)
+    
+    if scheduled_time:
+        set_clauses.append("scheduled_time = ?")
+        params.append(scheduled_time)
+
+    set_clause = ", ".join(set_clauses)
+    params.append(task_id)
+
+    try:
+        cursor.execute(f"""
+            UPDATE video_tasks
+            SET {set_clause}
+            WHERE id = ?
+        """, tuple(params))
+
+        conn.commit()
+    except sqlite3.IntegrityError as e:
+        print(f"更新视频任务失败: {e}")
+    finally:
+        conn.close()
+
+def delete_video_task(task_id):
+    """删除视频任务"""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("DELETE FROM video_tasks WHERE id = ?", (task_id,))
+        conn.commit()
+        print(f"视频任务 {task_id} 已删除")
+    except sqlite3.Error as e:
+        print(f"删除视频任务失败: {e}")
+    finally:
+        conn.close()

@@ -1,9 +1,11 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, Text
 from playwright.sync_api import sync_playwright
-from database import initialize_database,fetch_all_users, add_user,update_user, delete_user_by_id,fetch_user_by_id,update_user_group, add_user_group, update_user_group, fetch_all_user_groups, fetch_group_members,delete_user_group,  fetch_user_group_by_id
-
-
+from database import initialize_database,fetch_all_users, add_user,update_user, delete_user_by_id,fetch_user_by_id,update_user_group, add_user_group, update_user_group, fetch_all_user_groups,fetch_all_user_group_names, fetch_group_members,delete_user_group,  fetch_user_group_by_id
+from database import add_video_task, delete_video_task, fetch_all_video_tasks, fetch_video_task_by_id, update_video_task
+from tkinter import filedialog
+from tkcalendar import Calendar, DateEntry
+import datetime
     
 def save_user(platform, username, login_info):
     """保存用户逻辑，调用数据库操作函数"""
@@ -32,6 +34,7 @@ COLORS = {
     "light": "#f8f9fa",    # 亮色按钮颜色（浅灰色）
     "dark": "#343a40"      # 黑色按钮颜色
 }
+
 def create_button(parent, text, btn_type="default", command=None):
     """根据按钮类型设置不同的样式"""
     # 设置颜色字典
@@ -148,17 +151,65 @@ def show_main_menu():
     """显示主界面，提供中文的三个功能按钮"""
     clear_frame()
     tk.Label(main_frame, text="主界面", font=("Arial", 16)).pack(pady=20)
-    tk.Button(main_frame, text="发布视频", command=show_publish_video, width=20, height=2).pack(pady=10)
-    tk.Button(main_frame, text="查看任务", command=show_tasks, width=20, height=2).pack(pady=10)
+    tk.Button(main_frame, text="发布视频", command=show_create_video_task, width=20, height=2).pack(pady=10)
+    tk.Button(main_frame, text="查看任务", command=show_video_tasks, width=20, height=2).pack(pady=10)
     tk.Button(main_frame, text="用户列表", command=show_user_list, width=20, height=2).pack(pady=10)
     tk.Button(main_frame, text="用户组", command=show_user_groups, width=20, height=2).pack(pady=10)
 
-def show_publish_video():
-    """显示发布视频功能界面，左侧显示标签，右侧显示输入框"""
-    clear_frame()
-    tk.Label(main_frame, text="发布视频", font=("Arial", 16)).pack(pady=10)
+from tkinter import ttk
+from tkinter import filedialog
+from tkcalendar import Calendar, DateEntry
 
-    # 使用 Frame 布局表单
+def show_video_tasks():
+    
+    """显示所有视频发布任务的界面"""
+    def refresh_tasks():
+        for item in task_tree.get_children():
+            task_tree.delete(item)
+
+        tasks = fetch_all_video_tasks()
+        for task in tasks:
+            task_tree.insert("", "end", values=task)
+
+    clear_frame()
+    # 标题
+    tk.Label(main_frame, text="视频任务列表", font=("Arial", 16)).pack(pady=10)
+
+    columns = (
+        "id", "video_title", "video_desc", "video_path", "cover_path", "video_tags", "user_group", "user", "scheduled_time", "status"
+    )
+
+    task_tree = ttk.Treeview(main_frame, columns=columns, show="headings")
+
+    for col in columns:
+        task_tree.heading(col, text=col)
+        task_tree.column(col, width=100)
+
+    task_tree.pack(fill="both", expand=True)
+
+    button_frame = tk.Frame(main_frame)
+    button_frame.pack(pady=10, fill="x")
+
+    create_button = tk.Button(button_frame, text="新建任务", command=show_create_video_task)
+    create_button.pack(side="left", padx=5)
+
+    home_button = tk.Button(button_frame, text="返回主页", command=show_main_menu)
+    home_button.pack(side="left", padx=5)
+
+    refresh_button = tk.Button(button_frame, text="刷新", command=refresh_tasks)
+    refresh_button.pack(side="left", padx=5)
+
+    refresh_tasks()
+
+
+def show_create_video_task():
+    """显示创建视频发布任务界面"""
+    clear_frame()
+
+    # 标题
+    tk.Label(main_frame, text="创建视频发布任务", font=("Arial", 16)).pack(pady=10)
+
+    # 创建表单区域
     form_frame = tk.Frame(main_frame)
     form_frame.pack(pady=10, padx=20)
 
@@ -168,32 +219,104 @@ def show_publish_video():
     title_entry.grid(row=0, column=1, pady=5, sticky="ew")
 
     # 视频文件路径
-    tk.Label(form_frame, text="视频文件路径:", anchor="w", width=15).grid(row=1, column=0, pady=5, sticky="w")
-    video_path_entry = custom_entry(form_frame)
-    video_path_entry.grid(row=1, column=1, pady=5, sticky="ew")
+    tk.Label(form_frame, text="视频文件路径:").grid(row=1, column=0, sticky="w", pady=5)
+    video_path_entry = tk.Entry(form_frame, width=50)
+    video_path_entry.grid(row=1, column=1, pady=5)
 
     # 视频封面路径
     tk.Label(form_frame, text="视频封面路径:", anchor="w", width=15).grid(row=2, column=0, pady=5, sticky="w")
-    cover_path_entry = custom_entry(form_frame)
-    cover_path_entry.grid(row=2, column=1, pady=5, sticky="ew")
+    cover_path_entry = tk.Entry(form_frame, width=50)
+    cover_path_entry.grid(row=2, column=1, pady=5)
 
-    # 用户组选择
-    tk.Label(form_frame, text="用户组:", anchor="w", width=15).grid(row=3, column=0, pady=5, sticky="w")
-    user_group_combo = ttk.Combobox(form_frame, values=["组1", "组2", "组3"])
-    user_group_combo.grid(row=3, column=1, pady=5, sticky="ew")
+    # 视频标签
+    tk.Label(form_frame, text="视频标签 (逗号分隔):").grid(row=3, column=0, sticky="w", pady=5)
+    tags_entry = tk.Entry(form_frame, width=50)
+    tags_entry.grid(row=3, column=1, pady=5)
 
-    # 添加用户按钮
-    add_user_button = tk.Button(form_frame, text="添加用户", command=show_add_user)
-    add_user_button.grid(row=3, column=2, padx=10, pady=5, sticky="ew")
+    # 视频简介
+    tk.Label(form_frame, text="视频简介:", anchor="w", width=15).grid(row=4, column=0, pady=5, sticky="w")
+    description_textarea = tk.Text(form_frame, height=5, width=30)
+    description_textarea.grid(row=4, column=1, pady=5, sticky="ew")
 
-    # 发布按钮
-    publish_button = tk.Button(main_frame, text="发布", command=lambda: publish_video(
-        title_entry.get(), video_path_entry.get(), cover_path_entry.get(), user_group_combo.get()))
-    publish_button.pack(pady=10)
+    # 用户组多选框
+    tk.Label(form_frame, text="选择用户组:").grid(row=5, column=0, sticky="nw", pady=5)
+    user_group_listbox = tk.Listbox(form_frame, selectmode="multiple", height=5)
+    for group in fetch_all_user_group_names():
+        user_group_listbox.insert("end", group)
+    user_group_listbox.grid(row=5, column=1, pady=5, sticky="w")
 
-    # 返回主界面按钮
-    back_button = tk.Button(main_frame, text="返回主界面", command=show_main_menu)
-    back_button.pack(pady=10)
+    tk.Button(form_frame, text="新建用户组", command=show_add_user_group).grid(row=5, column=2, padx=10, pady=5)
+
+    # 用户多选框
+    tk.Label(form_frame, text="选择用户:").grid(row=6, column=0, sticky="nw", pady=5)
+    user_listbox = tk.Listbox(form_frame, selectmode="multiple", height=5)
+    for user in fetch_all_users():
+        user_listbox.insert("end", user[2])  # 显示用户名
+    user_listbox.grid(row=6, column=1, pady=5, sticky="w")
+    tk.Button(form_frame, text="新建用户", command=show_add_user).grid(row=6, column=2, padx=10, pady=5)
+
+    # 预约发布时间
+    tk.Label(form_frame, text="预约发布时间:", anchor="w", width=15).grid(row=7, column=0, pady=5, sticky="w")
+
+    # 日期选择器
+    today = datetime.date.today()
+    date_picker = DateEntry(
+        form_frame, width=10, date_pattern="yyyy-mm-dd",
+        mindate=today, state="readonly"
+    )
+    date_picker.grid(row=7, column=1, pady=5, sticky="w")
+
+    # 小时选择器
+    tk.Label(form_frame, text="小时:").grid(row=7, column=2, pady=5, sticky="w")
+    hour_entry = ttk.Combobox(form_frame, width=5, values=[f"{i:02}" for i in range(24)], state="readonly")
+    hour_entry.set("00")  # 默认值
+    hour_entry.grid(row=7, column=3, pady=5, padx=(0, 5))
+
+    # 分钟选择器
+    tk.Label(form_frame, text="分钟:").grid(row=7, column=4, pady=5, sticky="w")
+    minute_entry = ttk.Combobox(form_frame, width=5, values=[f"{i:02}" for i in range(60)], state="readonly")
+    minute_entry.set("00")  # 默认值
+    minute_entry.grid(row=7, column=5, pady=5)
+
+    # 底部按钮区域
+    bottom_frame = tk.Frame(main_frame)
+    bottom_frame.pack(pady=10)
+
+    def save_task():
+        video_title = title_entry.get()
+        video_desc = description_textarea.get("1.0", "end").strip()
+        video_path = video_path_entry.get()
+        cover_path = cover_path_entry.get()
+        video_tags = tags_entry.get()
+        selected_user_groups = [user_group_listbox.get(i) for i in user_group_listbox.curselection()]
+        selected_users = [user_listbox.get(i) for i in user_listbox.curselection()]
+        scheduled_date = date_picker.get_date()
+        scheduled_hour = hour_entry.get()
+        scheduled_minute = minute_entry.get()
+
+        if not video_title or not video_path or not scheduled_date or not scheduled_hour or not scheduled_minute:
+            messagebox.showerror("错误", "请填写所有必填字段")
+            return
+
+        if not selected_user_groups and not selected_users:
+            messagebox.showerror("错误", "请选择至少一个用户组或单个用户")
+            return
+        
+        # 拼接完整的预约时间
+        scheduled_time = f"{scheduled_date} {scheduled_hour}:{scheduled_minute}:00"
+
+        add_video_task(
+            video_title, video_path, cover_path, video_tags,
+            ",".join(selected_user_groups),  # 存储为逗号分隔的字符串
+            ",".join(selected_users),  # 存储为逗号分隔的字符串
+            video_desc, f"{scheduled_date} {scheduled_time}"
+        )
+
+        messagebox.showinfo("成功", "视频任务已创建")
+        show_video_tasks()
+
+    tk.Button(bottom_frame, text="创建任务", width=20, height=2, command=save_task).pack(side="left", padx=10)
+    tk.Button(bottom_frame, text="返回", width=20, height=2, command=show_main_menu).pack(side="left", padx=10)
 
 def show_user_groups():
     """用户组管理界面"""
@@ -429,13 +552,6 @@ def show_add_user():
     ).grid(row=0, column=1, padx=10)
 
 
-def show_tasks():
-    """显示任务管理功能界面"""
-    clear_frame()
-    tk.Label(main_frame, text="查看任务", font=("Arial", 16)).pack(pady=10)
-    tk.Label(main_frame, text="这里可以显示任务列表（占位内容）").pack(pady=10)
-    tk.Button(main_frame, text="返回主界面", command=show_main_menu).pack(pady=10)
-
 
 def show_user_list():
     """显示用户列表界面"""
@@ -624,7 +740,7 @@ initialize_database()
 # 主窗口
 root = tk.Tk()
 root.title("视频客户端")
-root.geometry("600x400")
+root.geometry("900x600")
 
 # 主框架
 main_frame = tk.Frame(root)
