@@ -1,12 +1,13 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, Text
 from playwright.sync_api import sync_playwright
-from database import initialize_database,fetch_all_users, add_user,update_user, delete_user_by_id,fetch_user_by_id,update_user_group, add_user_group, update_user_group, fetch_all_user_groups,fetch_all_user_group_names, fetch_group_members,delete_user_group,  fetch_user_group_by_id
-from database import add_video_task, delete_video_task, fetch_all_video_tasks, fetch_video_task_by_id, update_video_task
-from tkinter import filedialog
-from tkcalendar import Calendar, DateEntry
+from database import initialize_database,fetch_all_users, add_user,update_user, delete_user_by_id,fetch_user_by_id
+from database import update_user_group, add_user_group, update_user_group, fetch_all_user_groups,fetch_user_group_members_by_id, fetch_group_members,delete_user_group,  fetch_user_group_by_id
+from database import add_video_task, delete_video_task, fetch_all_video_tasks, fetch_video_task_by_id, update_video_task_status, fetch_pending_video_tasks
+import time
 import datetime
-    
+import threading
+import importlib
 def save_user(platform, username, login_info):
     """保存用户逻辑，调用数据库操作函数"""
     # 检查输入是否完整
@@ -92,8 +93,18 @@ def open_login_page(platform, get_login_button, save_cookie_button, browser_dict
     try:
         # 启动 Playwright 浏览器
         playwright = sync_playwright().start()
-        browser = playwright.chromium.launch(headless=False)
-        page = browser.new_page()
+        browser = playwright.chromium.launch(headless=False, args=[
+            "--disable-blink-features=AutomationControlled",
+            "--disable-infobars",
+            "--disable-extensions"
+        ])
+        context = browser.new_context(
+            user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+        )
+        page = context.new_page()
+        # 修改 navigator.webdriver 属性
+        page.evaluate("() => { Object.defineProperty(navigator, 'webdriver', { get: () => undefined }) }")
+
         page.goto(login_url)
 
         # 暂存浏览器对象
@@ -149,6 +160,7 @@ def custom_entry(parent):
 # Tkinter 界面功能
 def show_main_menu():
     """显示主界面，提供中文的三个功能按钮"""
+    # show_video_tasks()
     clear_frame()
     tk.Label(main_frame, text="主界面", font=("Arial", 16)).pack(pady=20)
     tk.Button(main_frame, text="发布视频", command=show_create_video_task, width=20, height=2).pack(pady=10)
@@ -161,50 +173,101 @@ from tkinter import filedialog
 from tkcalendar import Calendar, DateEntry
 
 def show_video_tasks():
-    
     """显示所有视频发布任务的界面"""
+
     def refresh_tasks():
+        """刷新任务列表"""
         for item in task_tree.get_children():
             task_tree.delete(item)
 
         tasks = fetch_all_video_tasks()
+        # 状态映射表
+        status_map = {
+            0: "未执行",
+            1: "执行中",
+            2: "已完成",
+            3: "出错了",
+        }
+        index = 0
         for task in tasks:
-            task_tree.insert("", "end", values=task)
+            index += 1
+            # 获取 user 和 user_group 的名称
+            print('user id',task[6])
+            user = fetch_user_by_id(task[6])
+            if user:
+                user_id, platform, username, *_ = user
+                user_name = f'{username}({platform})' 
+            else:
+                user_name = 'None'
+            # 检查 user_group 是否存在
+            print('group id',task[7])
+            user_group_data = fetch_user_group_by_id(task[7])
+            user_group_name = user_group_data['group_name'] if user_group_data else "None"
+
+
+            # 转换任务状态为中文描述
+            task_data = list(task)
+            task_data[9] = status_map.get(task_data[9], "未知状态")  # 将 status 转换为中文
+            # 插入到任务表中
+            task_tree.insert("", "end", values=(index, task_data[1], user_group_name, user_name, task_data[8], task_data[9]))
+
+            # # 转换任务状态为中文描述
+            # task_data = list(task)
+            # task_data[9] = status_map.get(task_data[9], "未知状态")  # 将 status 转换为中文
+            # # 插入到任务表中
+            # task_tree.insert("", "end", values=(task_data[0], task_data[1], task_data[6], task_data[7], task_data[8], task_data[9]))
 
     clear_frame()
     # 标题
     tk.Label(main_frame, text="视频任务列表", font=("Arial", 16)).pack(pady=10)
 
-    columns = (
-        "id", "video_title", "video_desc", "video_path", "cover_path", "video_tags", "user_group", "user", "scheduled_time", "status"
-    )
+    # 定义显示的列
+    columns = ("id", "video_title", "user_group", "user", "scheduled_time", "status")
+    column_titles = {
+        "id": "ID",
+        "video_title": "视频标题",
+        "user_group": "用户组",
+        "user": "用户",
+        "scheduled_time": "预约时间",
+        "status": "状态",
+    }
 
+    # 创建 Treeview 控件
     task_tree = ttk.Treeview(main_frame, columns=columns, show="headings")
 
     for col in columns:
-        task_tree.heading(col, text=col)
-        task_tree.column(col, width=100)
+        task_tree.heading(col, text=column_titles[col])  # 设置列标题为中文
+        task_tree.column(col, width=120, anchor="center")  # 设置列宽和对齐方式
 
     task_tree.pack(fill="both", expand=True)
 
+    # 按钮区域
     button_frame = tk.Frame(main_frame)
     button_frame.pack(pady=10, fill="x")
 
-    create_button = tk.Button(button_frame, text="新建任务", command=show_create_video_task)
-    create_button.pack(side="left", padx=5)
+    tk.Button(button_frame, text="新建任务", command=show_create_video_task).pack(side="left", padx=5)
+    tk.Button(button_frame, text="刷新", command=refresh_tasks).pack(side="left", padx=5)
 
-    home_button = tk.Button(button_frame, text="返回主页", command=show_main_menu)
-    home_button.pack(side="left", padx=5)
-
-    refresh_button = tk.Button(button_frame, text="刷新", command=refresh_tasks)
-    refresh_button.pack(side="left", padx=5)
-
+    # 初始化任务列表
     refresh_tasks()
 
 
 def show_create_video_task():
     """显示创建视频发布任务界面"""
     clear_frame()
+    # 获取用户和用户组
+    users = fetch_all_users()  # [{'id': 1, 'platform': '...', 'username': '...', 'login_info': '...'}, ...]
+    user_groups = fetch_all_user_groups()  # [{'id': 1, 'group_name': '...'}, ...]
+
+    # 映射用户的 label -> value
+    user_map = {f"{user[2]}({user[1]})": user[0] for user in users}  # 用户名为键，用户 ID 为值
+    user_labels = list(user_map.keys())  # 用户名标签列表
+
+    user_group_map = {group[1]: group[0] for group in user_groups}  # 用户组名为键，用户组 ID 为值
+    user_group_labels = list(user_group_map.keys())  # 用户组名列表
+
+    # 用户与用户组的选择
+    selection_var = tk.StringVar(value="user")  # 默认选择用户
 
     # 标题
     tk.Label(main_frame, text="创建视频发布任务", font=("Arial", 16)).pack(pady=10)
@@ -238,44 +301,59 @@ def show_create_video_task():
     description_textarea = tk.Text(form_frame, height=5, width=30)
     description_textarea.grid(row=4, column=1, pady=5, sticky="ew")
 
-    # 用户组多选框
-    tk.Label(form_frame, text="选择用户组:").grid(row=5, column=0, sticky="nw", pady=5)
-    user_group_listbox = tk.Listbox(form_frame, selectmode="multiple", height=5)
-    for group in fetch_all_user_group_names():
-        user_group_listbox.insert("end", group)
-    user_group_listbox.grid(row=5, column=1, pady=5, sticky="w")
+    # 用户或用户组选择
+    tk.Label(form_frame, text="选择用户或用户组:").grid(row=5, column=0, sticky="nw", pady=5)
+    selection_var = tk.StringVar(value="user")  # 默认值为用户
+    user_radio = tk.Radiobutton(form_frame, text="用户", variable=selection_var, value="user", command=lambda: toggle_selection())
+    user_group_radio = tk.Radiobutton(form_frame, text="用户组", variable=selection_var, value="user_group", command=lambda: toggle_selection())
+    user_radio.grid(row=5, column=1, sticky="w")
+    user_group_radio.grid(row=5, column=2, sticky="w")
 
-    tk.Button(form_frame, text="新建用户组", command=show_add_user_group).grid(row=5, column=2, padx=10, pady=5)
+    # 用户下拉框
+    user_frame = tk.Frame(form_frame)
+    user_frame.grid(row=6, column=1, pady=5)
+    user_combobox = ttk.Combobox(user_frame, state="readonly", width=30, values=user_labels)
+    user_combobox.pack(side="left")
+    tk.Button(user_frame, text="新建用户", command=show_add_user).pack(side="left")
 
-    # 用户多选框
-    tk.Label(form_frame, text="选择用户:").grid(row=6, column=0, sticky="nw", pady=5)
-    user_listbox = tk.Listbox(form_frame, selectmode="multiple", height=5)
-    for user in fetch_all_users():
-        user_listbox.insert("end", user[2])  # 显示用户名
-    user_listbox.grid(row=6, column=1, pady=5, sticky="w")
-    tk.Button(form_frame, text="新建用户", command=show_add_user).grid(row=6, column=2, padx=10, pady=5)
+    # 用户组下拉框（默认隐藏）
+    user_group_frame = tk.Frame(form_frame)
+    user_group_frame.grid(row=6, column=1, pady=5)
+    user_group_combobox = ttk.Combobox(user_group_frame, state="readonly", width=30, values=user_group_labels)
+    user_group_combobox.pack(side="left")
+    tk.Button(user_group_frame, text="新建用户组", command=show_add_user_group).pack(side="left")
+
+    # 切换显示逻辑
+    def toggle_selection():
+        if selection_var.get() == "user":
+            user_frame.grid()
+            user_group_frame.grid_remove()
+        else:
+            user_frame.grid_remove()
+            user_group_frame.grid()
 
     # 预约发布时间
     tk.Label(form_frame, text="预约发布时间:", anchor="w", width=15).grid(row=7, column=0, pady=5, sticky="w")
-
-    # 日期选择器
-    today = datetime.date.today()
-    date_picker = DateEntry(
-        form_frame, width=10, date_pattern="yyyy-mm-dd",
-        mindate=today, state="readonly"
-    )
-    date_picker.grid(row=7, column=1, pady=5, sticky="w")
+    # 当前日期和时间
+    now = datetime.datetime.now()
+    current_date = now.strftime("%Y-%m-%d")
+    current_hour = now.strftime("%H")  # 小时（两位数）
+    current_minute = now.strftime("%M")  # 分钟（两位数）
+    # 日期输入框
+    date_entry = tk.Entry(form_frame, width=20)
+    date_entry.insert(0, current_date)  # 默认值为当前日期
+    date_entry.grid(row=7, column=1, pady=5, sticky="w")
 
     # 小时选择器
     tk.Label(form_frame, text="小时:").grid(row=7, column=2, pady=5, sticky="w")
     hour_entry = ttk.Combobox(form_frame, width=5, values=[f"{i:02}" for i in range(24)], state="readonly")
-    hour_entry.set("00")  # 默认值
+    hour_entry.set(current_hour)  # 默认值为当前小时
     hour_entry.grid(row=7, column=3, pady=5, padx=(0, 5))
 
     # 分钟选择器
     tk.Label(form_frame, text="分钟:").grid(row=7, column=4, pady=5, sticky="w")
     minute_entry = ttk.Combobox(form_frame, width=5, values=[f"{i:02}" for i in range(60)], state="readonly")
-    minute_entry.set("00")  # 默认值
+    minute_entry.set(current_minute)  # 默认值为当前分钟
     minute_entry.grid(row=7, column=5, pady=5)
 
     # 底部按钮区域
@@ -288,9 +366,7 @@ def show_create_video_task():
         video_path = video_path_entry.get()
         cover_path = cover_path_entry.get()
         video_tags = tags_entry.get()
-        selected_user_groups = [user_group_listbox.get(i) for i in user_group_listbox.curselection()]
-        selected_users = [user_listbox.get(i) for i in user_listbox.curselection()]
-        scheduled_date = date_picker.get_date()
+        scheduled_date = date_entry.get()
         scheduled_hour = hour_entry.get()
         scheduled_minute = minute_entry.get()
 
@@ -298,18 +374,31 @@ def show_create_video_task():
             messagebox.showerror("错误", "请填写所有必填字段")
             return
 
-        if not selected_user_groups and not selected_users:
-            messagebox.showerror("错误", "请选择至少一个用户组或单个用户")
-            return
+        # 根据选择获取值
+        if selection_var.get() == "user":
+            selected_label = user_combobox.get()
+            if not selected_label:
+                messagebox.showerror("错误", "请选择一个用户")
+                return
+            selected_value = user_map[selected_label]  # 获取用户 ID
+            user_group_id = None
+            user_id = selected_value
+        else:
+            selected_label = user_group_combobox.get()
+            if not selected_label:
+                messagebox.showerror("错误", "请选择一个用户组")
+                return
+            selected_value = user_group_map[selected_label]  # 获取用户组 ID
+            user_group_id = selected_value
+            user_id = None
         
         # 拼接完整的预约时间
         scheduled_time = f"{scheduled_date} {scheduled_hour}:{scheduled_minute}:00"
 
         add_video_task(
-            video_title, video_path, cover_path, video_tags,
-            ",".join(selected_user_groups),  # 存储为逗号分隔的字符串
-            ",".join(selected_users),  # 存储为逗号分隔的字符串
-            video_desc, f"{scheduled_date} {scheduled_time}"
+            video_title= video_title,video_desc= video_desc,video_path= video_path,cover_path= cover_path,video_tags= video_tags,
+            user_group_id= user_group_id,user_id= user_id,scheduled_time=
+             f"{scheduled_time}"
         )
 
         messagebox.showinfo("成功", "视频任务已创建")
@@ -335,8 +424,7 @@ def show_user_groups():
     # 获取所有用户组并填充列表
     groups = fetch_all_user_groups()
     for group in groups:
-        group_id = group["id"]
-        group_name = group["group_name"]
+        group_id, group_name = group
         members = fetch_group_members(group_id)
         # 将成员的用户名提取为字符串
         members_str = ", ".join([f"{member[2]}({member[1]})" for member in members])  # 假设第2列是用户名
@@ -734,18 +822,89 @@ def clear_frame():
     for widget in main_frame.winfo_children():
         widget.destroy()
 
-# 初始化数据库
-initialize_database()
+def process_task(task):
+    """
+    处理单个视频任务。
+    根据平台动态调用对应的 upload_video 函数。
+    """
+    task_id, video_title, video_desc, video_path, cover_path, video_tags, user_group_id, user_id, scheduled_time, status = task
 
-# 主窗口
-root = tk.Tk()
-root.title("视频客户端")
-root.geometry("900x600")
+    # 确定用户列表
+    if user_group_id:
+        # 获取用户组中的所有用户
+        users = fetch_user_group_members_by_id(user_group_id)
+    elif user_id:
+        # 单个用户任务
+        user = fetch_user_by_id(user_id)
+        users = [user] if user else []
+    else:
+        print(f"Task {task_id} 无法找到用户信息，跳过。")
+        return
 
-# 主框架
-main_frame = tk.Frame(root)
-main_frame.pack(fill="both", expand=True)
+    # 遍历用户列表，上传视频
+    for user in users:
+        user_id, platform, username, login_info = user
+        print(f"处理用户 {username}({platform}) 的任务 {task_id}...")
 
-# 默认显示主界面
-show_main_menu()
-root.mainloop()
+        try:
+            # 动态导入平台模块
+            platform_module = importlib.import_module(f"platforms.{platform.lower()}")
+            # 调用 upload_video 函数
+            platform_module.upload_video(task, user)
+            print(f"[成功] 任务 {task_id} 上传到平台 {platform} 用户 {username}。")
+
+            # 成功后更新任务状态为 "已完成" (2)
+            update_video_task_status(task_id, 2)
+
+        except ModuleNotFoundError:
+            print(f"平台 {platform} 不支持，跳过用户 {username} 的任务。")
+        except Exception as e:
+            print(f"任务 {task_id} 上传到 {platform} 用户 {username} 失败：{e}")
+
+def task_scheduler():
+    """定时检查并执行未发布的任务"""
+    while True:
+        print("检查未发布的任务...")
+        try:
+            pending_tasks = fetch_pending_video_tasks()
+            print(f"找到 {len(pending_tasks)} 个未发布的任务。")
+            for task in pending_tasks:
+                print(f"正在处理任务: {task}")
+                process_task(task)  # 调用任务处理函数
+        except Exception as e:
+            print(f"任务调度器出现错误: {e}")
+        # 每隔 10 秒检查一次
+        time.sleep(10)
+
+def start_scheduler():
+    """启动调度器线程"""
+    scheduler_thread = threading.Thread(target=task_scheduler, daemon=True)
+    scheduler_thread.start()
+    print("任务调度器已启动。")
+
+def run_client():
+    """初始化客户端并启动主程序"""
+    # 初始化数据库
+    initialize_database()
+
+    # 启动任务调度器
+    start_scheduler()
+
+    # 创建主窗口
+    root = tk.Tk()
+    root.title("视频自动发布客户端")
+    root.geometry("900x600")
+
+    # 创建主框架
+    global main_frame
+    main_frame = tk.Frame(root)
+    main_frame.pack(fill="both", expand=True)
+
+    # 显示主界面
+    show_main_menu()
+
+    # 启动主事件循环
+    root.mainloop()
+
+if __name__ == "__main__":
+    run_client()

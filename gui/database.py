@@ -1,4 +1,5 @@
 import sqlite3
+import datetime
 
 # 数据库文件路径
 DB_FILE = "user_data.db"
@@ -37,6 +38,7 @@ def initialize_database():
         )
     """)
 
+
     # 创建 video_tasks 表
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS video_tasks (
@@ -46,9 +48,9 @@ def initialize_database():
             video_path TEXT,
             cover_path TEXT,
             video_tags TEXT,
-            user_group TEXT,
-            user TEXT, 
-            scheduled_time TEXT
+            user_group_id INTEGER DEFAULT NULL,
+            user_id INTEGER DEFAULT NULL,
+            scheduled_time TEXT,
             status INTEGER DEFAULT 0
         )
     """)
@@ -65,14 +67,21 @@ def fetch_all_users():
     conn.close()
     return users
 
-# 用户表相关操作
 def fetch_user_by_id(user_id):
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-    user = cursor.fetchone()
-    conn.close()
-    return user
+    """根据用户ID获取用户信息"""
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+            user = cursor.fetchone()
+            return user
+    
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
+        return None  # 可以根据需求返回 None 或者其他错误标识
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        return None
 
 
 def add_user(platform, username, login_info):
@@ -133,7 +142,7 @@ def fetch_all_user_groups():
     groups = cursor.fetchall()
     conn.close()
     # 将元组转换为字典
-    return [{"id": group[0], "group_name": group[1]} for group in groups]
+    return groups
 
 def fetch_all_user_group_names():
     """获取所有用户组名称"""
@@ -281,29 +290,64 @@ def fetch_user_group_by_id(group_id):
         "members": members
     }
 
-def add_video_task(video_title, video_description, video_path, cover_path, video_tags, user_group, scheduled_time):
-    """创建视频任务"""
+def fetch_user_group_members_by_id(group_id):
+    """
+    根据用户组ID获取用户组所有成员
+    """
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT u.id, u.platform, u.username 
+        FROM user_group_members ugm
+        JOIN users u ON ugm.user_id = u.id
+        WHERE ugm.group_id = ?
+    """, (group_id,))
+    results = cursor.fetchall()
+    conn.close()
+    return results
+
+def add_video_task(video_title, video_desc, video_path, cover_path, video_tags, user_group_id, user_id, scheduled_time, status=0):
+    """
+    创建视频任务
+    :param video_title: 视频标题
+    :param video_desc: 视频描述
+    :param video_path: 视频路径
+    :param cover_path: 视频封面路径
+    :param video_tags: 视频标签（逗号分隔）
+    :param user_group_id: 用户组 ID，若选择用户组则为整数，若不选择则为 None
+    :param user_id: 用户 ID，若选择用户则为整数，若不选择则为 None
+    :param scheduled_time: 预约发布时间（字符串格式：YYYY-MM-DD HH:MM:SS）
+    :param status: 任务状态，默认为 0
+    """
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
     try:
+        # 确保 user_group_id 和 user_id 至少有一个非空
+        if user_group_id is None and user_id is None:
+            raise ValueError("用户组 ID 和用户 ID 不能同时为空")
+
         cursor.execute("""
-            INSERT INTO video_tasks (video_title, video_description, video_path, cover_path, video_tags, user_group, scheduled_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (video_title, video_description, video_path, cover_path, video_tags, user_group, scheduled_time))
+            INSERT INTO video_tasks (video_title, video_desc, video_path, cover_path, video_tags, user_group_id, user_id, scheduled_time, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (video_title, video_desc, video_path, cover_path, video_tags, user_group_id, user_id, scheduled_time, status))
 
         conn.commit()
+        print("视频任务创建成功")
+    except ValueError as ve:
+        print(f"创建视频任务失败: {ve}")
     except sqlite3.IntegrityError as e:
         print(f"创建视频任务失败: {e}")
     finally:
         conn.close()
+
 
 def fetch_all_video_tasks():
     """获取所有视频任务"""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM video_tasks")
+    cursor.execute("SELECT * FROM video_tasks ORDER BY id DESC")
     tasks = cursor.fetchall()
 
     conn.close()
@@ -386,3 +430,33 @@ def delete_video_task(task_id):
         print(f"删除视频任务失败: {e}")
     finally:
         conn.close()
+
+def fetch_pending_video_tasks():
+    """查询未发布且满足预约时间的任务"""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    
+    # 当前时间
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # 查询未发布（status = 0）且预约时间已到的任务
+    cursor.execute("""
+        SELECT * FROM video_tasks
+        WHERE status = 0 AND scheduled_time <= ?
+    """, (now,))
+
+    tasks = cursor.fetchall()
+    conn.close()
+    return tasks
+
+def update_video_task_status(task_id, status):
+    """更新任务状态"""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE video_tasks
+        SET status = ?
+        WHERE id = ?
+    """, (status, task_id))
+    conn.commit()
+    conn.close()
