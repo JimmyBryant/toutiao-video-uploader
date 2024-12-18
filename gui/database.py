@@ -364,7 +364,7 @@ def fetch_video_task_by_id(task_id):
     conn.close()
     return task
 
-def update_video_task(task_id, title=None, description=None, video_path=None, cover_path=None, video_tags=None, user_group=None, scheduled_time=None):
+def update_video_task(task_id, video_title=None, video_desc=None, video_path=None, cover_path=None, video_tags=None, user_group=None, user_id=None, scheduled_time=None, status=None):
     """更新视频任务"""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -373,33 +373,37 @@ def update_video_task(task_id, title=None, description=None, video_path=None, co
     set_clauses = []
     params = []
     
-    if title:
-        set_clauses.append("title = ?")
-        params.append(title)
+    if video_title is not None:
+        set_clauses.append("video_title = ?")
+        params.append(video_title)
     
-    if description:
-        set_clauses.append("description = ?")
-        params.append(description)
+    if video_desc is not None:
+        set_clauses.append("video_desc = ?")
+        params.append(video_desc)
     
-    if video_path:
+    if video_path is not None:
         set_clauses.append("video_path = ?")
         params.append(video_path)
     
-    if cover_path:
+    if cover_path is not None:
         set_clauses.append("cover_path = ?")
         params.append(cover_path)
     
-    if video_tags:
+    if video_tags is not None:
         set_clauses.append("video_tags = ?")
         params.append(video_tags)
     
-    if user_group:
+    if user_group is not None:
         set_clauses.append("user_group = ?")
         params.append(user_group)
     
-    if scheduled_time:
+    if scheduled_time is not None:
         set_clauses.append("scheduled_time = ?")
         params.append(scheduled_time)
+    
+    if status is not None:  # 显式检查 status 是否为 None
+        set_clauses.append("status = ?")
+        params.append(status)
 
     set_clause = ", ".join(set_clauses)
     params.append(task_id)
