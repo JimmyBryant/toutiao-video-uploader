@@ -168,15 +168,12 @@ def show_main_menu():
     tk.Button(main_frame, text="用户列表", command=show_user_list, width=20, height=2).pack(pady=10)
     tk.Button(main_frame, text="用户组", command=show_user_groups, width=20, height=2).pack(pady=10)
 
-from tkinter import ttk
-from tkinter import filedialog
-from tkcalendar import Calendar, DateEntry
-
 def show_video_tasks():
     """显示所有视频发布任务的界面"""
-
+    tasks = []
     def refresh_tasks():
         """刷新任务列表"""
+        nonlocal tasks  # 使用外层的 `tasks`
         for item in task_tree.get_children():
             task_tree.delete(item)
 
@@ -192,30 +189,88 @@ def show_video_tasks():
         for task in tasks:
             index += 1
             # 获取 user 和 user_group 的名称
-            print('user id',task[6])
-            user = fetch_user_by_id(task[6])
+            user = fetch_user_by_id(task[7])
             if user:
                 user_id, platform, username, *_ = user
-                user_name = f'{username}({platform})' 
+                user_name = f'{username}({platform})'
             else:
                 user_name = 'None'
-            # 检查 user_group 是否存在
-            print('group id',task[7])
-            user_group_data = fetch_user_group_by_id(task[7])
-            user_group_name = user_group_data['group_name'] if user_group_data else "None"
 
+            user_group_data = fetch_user_group_by_id(task[6])
+            user_group_name = user_group_data['group_name'] if user_group_data else "None"
 
             # 转换任务状态为中文描述
             task_data = list(task)
             task_data[9] = status_map.get(task_data[9], "未知状态")  # 将 status 转换为中文
             # 插入到任务表中
-            task_tree.insert("", "end", values=(index, task_data[1], user_group_name, user_name, task_data[8], task_data[9]))
+            task_tree.insert("", "end", values=(task_data[0], task_data[1], user_group_name, user_name, task_data[8], task_data[9]))
 
-            # # 转换任务状态为中文描述
-            # task_data = list(task)
-            # task_data[9] = status_map.get(task_data[9], "未知状态")  # 将 status 转换为中文
-            # # 插入到任务表中
-            # task_tree.insert("", "end", values=(task_data[0], task_data[1], task_data[6], task_data[7], task_data[8], task_data[9]))
+    def start_task():
+        """手动启动选中的任务"""
+        selected_item = task_tree.selection()
+        if not selected_item:
+            messagebox.showerror("错误", "请选择一个任务")
+            return
+
+        task_id = int(task_tree.item(selected_item, "values")[0])  # 从 TreeView 获取任务 ID
+        task = next((t for t in tasks if t[0] == task_id), None)  # 根据 ID 获取任务
+
+        if not task:
+            messagebox.showerror("错误", "未找到对应任务")
+            return
+
+        if task[9] == 0:  # 未执行 -> 执行中
+            update_video_task_status(task[0], 1)  # 更新任务状态为执行中
+            process_task(task)  # 执行任务逻辑
+            print(f"任务 {task[0]} 已手动启动。")
+        else:
+            messagebox.showinfo("提示", "该任务无法启动（状态不符合）。")
+
+        refresh_tasks()
+
+
+    def stop_task():
+        """手动停止选中的任务"""
+        selected_item = task_tree.selection()
+        if not selected_item:
+            messagebox.showerror("错误", "请选择一个任务")
+            return
+
+        task_id = int(task_tree.item(selected_item, "values")[0])  # 从 TreeView 获取任务 ID
+        task = next((t for t in tasks if t[0] == task_id), None)  # 根据 ID 获取任务
+
+        if not task:
+            messagebox.showerror("错误", "未找到对应任务")
+            return
+
+        if task[9] == 1:  # 执行中 -> 未执行
+            update_video_task_status(task[0], 0)  # 更新任务状态为未执行
+            print(f"任务 {task[0]} 已手动停止。")
+        else:
+            messagebox.showinfo("提示", "该任务无法停止（状态不符合）。")
+
+        refresh_tasks()
+
+
+    def toggle_scheduler():
+        """启动或关闭定时任务"""
+        global scheduler_thread, is_scheduler_running
+
+        if not is_scheduler_running:
+            # 启动定时任务
+            is_scheduler_running = True
+            scheduler_event.clear()  # 清除停止标志
+            scheduler_thread = threading.Thread(target=task_scheduler, daemon=True)
+            scheduler_thread.start()
+            scheduler_button.config(text="关闭定时任务")
+            print("定时任务已启动。")
+        else:
+            # 停止定时任务
+            is_scheduler_running = False
+            scheduler_event.set()  # 设置停止标志
+            scheduler_thread = None  # 释放线程引用
+            scheduler_button.config(text="启动定时任务")
+            print("定时任务已关闭。")
 
     clear_frame()
     # 标题
@@ -245,8 +300,20 @@ def show_video_tasks():
     button_frame = tk.Frame(main_frame)
     button_frame.pack(pady=10, fill="x")
 
-    tk.Button(button_frame, text="新建任务", command=show_create_video_task).pack(side="left", padx=5)
-    tk.Button(button_frame, text="刷新", command=refresh_tasks).pack(side="left", padx=5)
+    # 手动启动任务按钮
+    tk.Button(button_frame, text="手动启动任务", command=start_task).pack(side="left", padx=5)
+    # 手动停止任务按钮
+    tk.Button(button_frame, text="手动停止任务", command=stop_task).pack(side="left", padx=5)
+
+    # 定时任务控制按钮
+    scheduler_button = tk.Button(button_frame, text="启动定时任务", command=toggle_scheduler)
+    scheduler_button.pack(side="left", padx=5)
+
+
+    # 返回主页按钮
+    tk.Button(button_frame, text="返回主页", command=show_main_menu).pack(side="right", padx=5)
+    tk.Button(button_frame, text="刷新", command=refresh_tasks).pack(side="right", padx=5)
+    tk.Button(button_frame, text="新建任务", command=show_create_video_task).pack(side="right", padx=5)
 
     # 初始化任务列表
     refresh_tasks()
@@ -322,6 +389,7 @@ def show_create_video_task():
     user_group_combobox = ttk.Combobox(user_group_frame, state="readonly", width=30, values=user_group_labels)
     user_group_combobox.pack(side="left")
     tk.Button(user_group_frame, text="新建用户组", command=show_add_user_group).pack(side="left")
+    user_group_frame.grid_remove()
 
     # 切换显示逻辑
     def toggle_selection():
@@ -394,7 +462,6 @@ def show_create_video_task():
         
         # 拼接完整的预约时间
         scheduled_time = f"{scheduled_date} {scheduled_hour}:{scheduled_minute}:00"
-
         add_video_task(
             video_title= video_title,video_desc= video_desc,video_path= video_path,cover_path= cover_path,video_tags= video_tags,
             user_group_id= user_group_id,user_id= user_id,scheduled_time=
@@ -861,11 +928,17 @@ def process_task(task):
         except Exception as e:
             print(f"任务 {task_id} 上传到 {platform} 用户 {username} 失败：{e}")
 
+
+scheduler_thread = None  # 全局变量，存储调度器线程
+scheduler_event = threading.Event()  # 全局事件，用于控制线程停止
+is_scheduler_running = False  # 定时任务状态
+
 def task_scheduler():
     """定时检查并执行未发布的任务"""
-    while True:
-        print("检查未发布的任务...")
+    print("任务调度器启动...")
+    while not scheduler_event.is_set():  # 检查是否设置停止标志
         try:
+            print("检查未发布的任务...")
             pending_tasks = fetch_pending_video_tasks()
             print(f"找到 {len(pending_tasks)} 个未发布的任务。")
             for task in pending_tasks:
@@ -874,7 +947,8 @@ def task_scheduler():
         except Exception as e:
             print(f"任务调度器出现错误: {e}")
         # 每隔 10 秒检查一次
-        time.sleep(10)
+        scheduler_event.wait(10)  # 如果 `scheduler_event` 被设置，则提前退出
+    print("任务调度器已停止。")
 
 def start_scheduler():
     """启动调度器线程"""
@@ -886,9 +960,6 @@ def run_client():
     """初始化客户端并启动主程序"""
     # 初始化数据库
     initialize_database()
-
-    # 启动任务调度器
-    start_scheduler()
 
     # 创建主窗口
     root = tk.Tk()
