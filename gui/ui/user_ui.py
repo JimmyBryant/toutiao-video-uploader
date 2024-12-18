@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, Text
 from database import fetch_all_users, fetch_user_by_id, add_user, delete_user_by_id, update_user,fetch_all_user_groups,fetch_group_members
 from playwright.sync_api import sync_playwright
+import json
 # 打开对应平台的登录页面
 def open_login_page(platform, get_login_button, save_cookie_button, browser_dict):
     login_urls = {
@@ -57,12 +58,15 @@ def save_cookies(browser_dict, save_cookie_button, get_login_button, username_en
             context = browser_dict["context"]
             # 保存 Storage State
             storage_state = context.storage_state()
-            username_entry.login_info = storage_state  # 存储为用户的登录信息
+            # 将 storage_state 转换为 JSON 格式的字符串
+            storage_state_json = json.dumps(storage_state)
+            
+            username_entry.login_info = storage_state_json  # 存储为用户的登录信息
 
             # 更新 TextArea 的内容
             cookie_textarea.config(state="normal")  # 解锁 Text 框
             cookie_textarea.delete("1.0", "end")    # 清空内容
-            cookie_textarea.insert("1.0", storage_state)  # 插入 Storage State 数据
+            cookie_textarea.insert("1.0", storage_state_json)  # 插入 Storage State 数据
             cookie_textarea.config(state="disabled")  # 设置为只读
 
             # 关闭浏览器

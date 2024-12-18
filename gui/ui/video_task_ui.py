@@ -7,7 +7,7 @@ import datetime
 import threading
 import importlib
 from playwright.sync_api import sync_playwright
-
+import json
 
 scheduler_thread = None  # 全局变量，存储调度器线程
 scheduler_event = threading.Event()  # 全局事件，用于控制线程停止
@@ -38,6 +38,7 @@ def process_task(task):
         print(f"处理用户 {username}({platform}) 的任务 {task_id}...")
 
         try:
+            storage_state = json.loads(login_info)  # 假设 login_info 存储的是 JSON 格式的 Cookie 字符串
             # 使用独立的 Playwright 浏览器上下文
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=False, args=[
@@ -46,11 +47,12 @@ def process_task(task):
                     "--disable-extensions"
                 ])
                 context = browser.new_context(
+                    storage_state=storage_state,
                     user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
                 )
                 # 这里可以传入 cookies 或自定义逻辑
                 platform_module = importlib.import_module(f"platforms.{platform.lower()}")
-                platform_module.upload_video(task, user, context)
+                platform_module.upload_video(task, context)
                 browser.close()
 
         except ModuleNotFoundError:

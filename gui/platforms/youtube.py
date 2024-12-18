@@ -2,33 +2,15 @@ from playwright.sync_api import sync_playwright
 import json
 import time
 
-def upload_video(task, user, context):
+def upload_video(task, context):
     """
     使用 Playwright 在 YouTube 发布视频
     :param task: 视频任务信息 (包含视频路径、标题、描述等)
     :param user: 用户信息 (包含登录信息 login_info)
     """
     task_id, video_title, video_desc, video_path, cover_path, video_tags, user_group_id, user_id, scheduled_time, status = task
-    login_info = user[3]  # 从用户信息中获取 cookie 信息
-
-    print(f"[YouTube] 开始上传视频 '{video_title}'，用户: {user[2]}")
 
     try:
-        # 加载 Cookies (login_info)
-        if login_info:
-            try:
-                print(login_info)
-                storage_state = json.loads(login_info)  # 假设 login_info 存储的是 JSON 格式的 Cookie 字符串
-            except Exception as e:
-                print("[YouTube] 错误: 未提供有效的登录信息 (Cookies)",e)
-                return
-            # 打开 YouTube 视频上传页面
-            context = context.new_context(storage_state=storage_state)
-            print("[YouTube] 已成功加载 Cookies")
-        else:
-            print("[YouTube] 错误: 未提供有效的登录信息 (Cookies)")
-            return
-
 
         page = context.new_page()
          # 修改 navigator.webdriver 属性
