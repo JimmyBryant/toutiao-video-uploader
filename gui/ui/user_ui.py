@@ -5,11 +5,11 @@ from playwright.sync_api import sync_playwright
 # 打开对应平台的登录页面
 def open_login_page(platform, get_login_button, save_cookie_button, browser_dict):
     login_urls = {
-        "Bilibili": "https://www.bilibili.com",
-        "Toutiao": "https://www.toutiao.com",
-        "Douyin": "https://www.douyin.com",
-        "YouTube": "https://www.youtube.com",
-        "TikTok": "https://www.tiktok.com"
+        "Bilibili": "https://passport.bilibili.com/login",
+        "Toutiao": "https://www.toutiao.com/login",
+        "Douyin": "https://www.douyin.com/login",
+        "YouTube": "https://accounts.google.com/signin",
+        "TikTok": "https://www.tiktok.com/login"
     }
 
     if platform not in login_urls:
@@ -30,14 +30,18 @@ def open_login_page(platform, get_login_button, save_cookie_button, browser_dict
             user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
         )
         page = context.new_page()
+
         # 修改 navigator.webdriver 属性
         page.evaluate("() => { Object.defineProperty(navigator, 'webdriver', { get: () => undefined }) }")
 
+        # 打开指定平台登录页面
         page.goto(login_url)
+        messagebox.showinfo("提示", "请在浏览器中完成登录，然后点击“保存登录信息”")
 
-        # 暂存浏览器对象
+        # 暂存 Playwright 对象
         browser_dict["playwright"] = playwright
         browser_dict["browser"] = browser
+        browser_dict["context"] = context
         browser_dict["page"] = page
 
         # 切换按钮状态
@@ -46,31 +50,36 @@ def open_login_page(platform, get_login_button, save_cookie_button, browser_dict
     except Exception as e:
         messagebox.showerror("错误", f"无法打开登录页面：{e}")
 
-# 保存 Cookie 信息并关闭浏览器
+# 保存 Storage State 并关闭浏览器
 def save_cookies(browser_dict, save_cookie_button, get_login_button, username_entry, cookie_textarea):
     try:
-        if "page" in browser_dict:
-            page = browser_dict["page"]
-            cookies = page.context.cookies()
-            username_entry.login_info = str(cookies)  # 暂存登录信息
+        if "context" in browser_dict:
+            context = browser_dict["context"]
+            # 保存 Storage State
+            storage_state = context.storage_state()
+            username_entry.login_info = storage_state  # 存储为用户的登录信息
+
+            # 更新 TextArea 的内容
+            cookie_textarea.config(state="normal")  # 解锁 Text 框
+            cookie_textarea.delete("1.0", "end")    # 清空内容
+            cookie_textarea.insert("1.0", storage_state)  # 插入 Storage State 数据
+            cookie_textarea.config(state="disabled")  # 设置为只读
+
             # 关闭浏览器
             browser_dict["browser"].close()
             browser_dict["playwright"].stop()
+
             # 清除浏览器对象
             browser_dict.clear()
 
             # 切换按钮状态
             save_cookie_button.config(state="disabled")
-            get_login_button.config(state="normal")
-            messagebox.showinfo("成功", "Cookies 已成功保存！")
-
-            # 更新 TextArea 的内容
-            cookie_textarea.config(state="normal")  # 解锁 Text 框
-            cookie_textarea.delete("1.0", "end")    # 清空内容
-            cookie_textarea.insert("1.0", cookies) # 插入 Cookie 数据
-            cookie_textarea.config(state="disabled")  # 设置为只读
+            get_login_button.config(state="normal", text="获取登录信息")
+            messagebox.showinfo("成功", "登录信息已成功保存！")
+        else:
+            raise Exception("未找到浏览器上下文，无法保存登录信息")
     except Exception as e:
-        messagebox.showerror("错误", f"保存 Cookies 时出错：{e}")
+        messagebox.showerror("错误", f"保存登录信息时出错：{e}")
 
 def save_user(platform, username, login_info):
     """保存用户逻辑，调用数据库操作函数"""
@@ -240,7 +249,7 @@ class UserUI(tk.Frame):
             self.app_controller.show_user_list()
             return
 
-        platform, username, login_info = user
+        id, platform, username, login_info,*_ = user
 
         # 编辑表单
         form_frame = tk.Frame(main_frame)

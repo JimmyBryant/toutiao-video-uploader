@@ -6,7 +6,7 @@ from database import add_video_task,  fetch_all_video_tasks, fetch_video_task_by
 import datetime
 import threading
 import importlib
-
+from playwright.sync_api import sync_playwright
 
 
 scheduler_thread = None  # 全局变量，存储调度器线程
@@ -38,35 +38,71 @@ def process_task(task):
         print(f"处理用户 {username}({platform}) 的任务 {task_id}...")
 
         try:
-            # 动态导入平台模块
-            platform_module = importlib.import_module(f"platforms.{platform.lower()}")
-            # 调用 upload_video 函数
-            platform_module.upload_video(task, user)
-            print(f"[成功] 任务 {task_id} 上传到平台 {platform} 用户 {username}。")
-
-            # 成功后更新任务状态为 "已完成" (2)
-            update_video_task_status(task_id, 2)
+            # 使用独立的 Playwright 浏览器上下文
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=False, args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-infobars",
+                    "--disable-extensions"
+                ])
+                context = browser.new_context(
+                    user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+                )
+                # 这里可以传入 cookies 或自定义逻辑
+                platform_module = importlib.import_module(f"platforms.{platform.lower()}")
+                platform_module.upload_video(task, user, context)
+                browser.close()
 
         except ModuleNotFoundError:
             print(f"平台 {platform} 不支持，跳过用户 {username} 的任务。")
+            raise
         except Exception as e:
             print(f"任务 {task_id} 上传到 {platform} 用户 {username} 失败：{e}")
+            raise
+        finally:
+            # 确保关闭浏览器实例
+            if browser:
+                try:
+                    browser.close()
+                except Exception as e:
+                    print(f"关闭浏览器时发生错误：{e}")
 def task_scheduler():
-    """定时检查并执行未发布的任务"""
+    """
+    定时检查并执行未发布的任务。
+    """
     print("任务调度器启动...")
-    while not scheduler_event.is_set():  # 检查是否设置停止标志
+    while not scheduler_event.is_set():
         try:
             print("检查未发布的任务...")
-            pending_tasks = fetch_pending_video_tasks()
+            pending_tasks = fetch_pending_video_tasks()  # 获取未执行的任务
             print(f"找到 {len(pending_tasks)} 个未发布的任务。")
+            
             for task in pending_tasks:
-                print(f"正在处理任务: {task}")
-                process_task(task)  # 调用任务处理函数
+                task_id = task[0]
+                try:
+                    # 更新任务状态为执行中
+                    update_video_task_status(task_id, 1)  
+                    print(f"任务 {task_id} 状态更新为执行中。")
+                    
+                    # 执行任务
+                    process_task(task)
+                    
+                    # 如果执行成功，更新状态为已完成
+                    update_video_task_status(task_id, 2)  
+                    print(f"任务 {task_id} 状态更新为已完成。")
+                except Exception as e:
+                    # 如果任务执行失败，更新状态为出错
+                    update_video_task_status(task_id, 3)
+                    print(f"任务 {task_id} 状态更新为出错: {e}")
+
         except Exception as e:
             print(f"任务调度器出现错误: {e}")
-        # 每隔 10 秒检查一次
-        scheduler_event.wait(10)  # 如果 `scheduler_event` 被设置，则提前退出
+
+        # 等待 10 秒后重新检查
+        scheduler_event.wait(10)
+
     print("任务调度器已停止。")
+
 
 def start_scheduler():
     """启动调度器线程"""
@@ -131,9 +167,17 @@ class VideoTaskUI(tk.Frame):
                 return
 
             if task[9] == 0:  # 未执行 -> 执行中
-                update_video_task_status(task[0], 1)  # 更新任务状态为执行中
-                process_task(task)  # 执行任务逻辑
-                print(f"任务 {task[0]} 已手动启动。")
+                try:
+                    update_video_task_status(task[0], 1)  # 更新任务状态为执行中
+                    process_task(task)  # 执行任务逻辑
+                    print(f"任务 {task[0]} 已手动启动。")
+                    # 如果任务执行成功，更新状态为“已完成”
+                    update_video_task_status(task[0], 2)
+                except Exception as e:
+                    # 捕获任务失败的异常并更新状态为“出错”
+                    update_video_task_status(task[0], 3)
+                    print(f"任务 {task[0]} 执行失败：{e}")
+                    messagebox.showerror("任务执行失败", f"任务 {task_id} 执行失败，错误：{e}")
             else:
                 messagebox.showinfo("提示", "该任务无法启动（状态不符合）。")
 

@@ -119,7 +119,7 @@ class UserGroupUI(tk.Frame):
         tk.Button(
             bottom_frame, "返回",
             "default",
-            command=show_user_groups
+            command=self.app_controller.show_user_groups
         ).pack(side="left", padx=10)
 
     def show_edit_user_group(self, group_id):
