@@ -5,13 +5,18 @@ from database import fetch_all_user_groups, fetch_user_group_by_id, fetch_user_g
 from database import add_video_task,  fetch_all_video_tasks, fetch_video_task_by_id, update_video_task_status, fetch_pending_video_tasks, update_video_task
 import datetime
 import threading
+import queue
 import importlib
 from playwright.sync_api import sync_playwright
 import json
 
+
+# 全局任务队列
+task_queue = queue.Queue()
 scheduler_thread = None  # 全局变量，存储调度器线程
 scheduler_event = threading.Event()  # 全局事件，用于控制线程停止
 is_scheduler_running = False  # 定时任务状态
+global_stop_flag = threading.Event()  # 添加全局停止标志
 
 def process_task(task):
     """
@@ -63,54 +68,63 @@ def process_task(task):
             raise
         finally:
             # 确保关闭浏览器实例
-            if browser:
+            if 'browser' in locals():
                 try:
                     browser.close()
                 except Exception as e:
                     print(f"关闭浏览器时发生错误：{e}")
+def worker():
+    """
+    任务队列的工作线程。
+    """
+    while not global_stop_flag.is_set():  # 检查全局停止标志
+        try:
+            task = task_queue.get(timeout=1)  # 从队列中获取任务
+            if task is None:
+                break  # 如果队列中是 None，则退出线程
+            task_id = task[0]
+            print(f"[线程 {threading.current_thread().name}] 正在处理任务 {task_id}")
+            update_video_task_status(task_id, 1)  # 更新任务状态为执行中
+            try:
+                process_task(task)  # 执行任务
+                update_video_task_status(task_id, 2)  # 更新任务状态为已完成
+                print(f"任务 {task_id} 已完成。")
+            except Exception as e:
+                update_video_task_status(task_id, 3)  # 更新任务状态为出错
+                print(f"任务 {task_id} 出现错误：{e}")
+            finally:
+                task_queue.task_done()  # 标记任务完成
+        except queue.Empty:
+            continue  # 如果队列为空，等待下一次任务
+
+    print(f"[线程 {threading.current_thread().name}] 退出。")
+
+
 def task_scheduler():
     """
-    定时检查并执行未发布的任务。
+    主线程任务调度器：定时检查数据库中的任务，并将其添加到队列。
     """
     print("任务调度器启动...")
-    while not scheduler_event.is_set():
+    while not global_stop_flag.is_set():  # 检查全局停止标志
         try:
             print("检查未发布的任务...")
             pending_tasks = fetch_pending_video_tasks()  # 获取未执行的任务
             print(f"找到 {len(pending_tasks)} 个未发布的任务。")
             
             for task in pending_tasks:
-                task_id = task[0]
-                try:
-                    # 更新任务状态为执行中
-                    update_video_task_status(task_id, 1)  
-                    print(f"任务 {task_id} 状态更新为执行中。")
-                    
-                    # 执行任务
-                    process_task(task)
-                    
-                    # 如果执行成功，更新状态为已完成
-                    update_video_task_status(task_id, 2)  
-                    print(f"任务 {task_id} 状态更新为已完成。")
-                except Exception as e:
-                    # 如果任务执行失败，更新状态为出错
-                    update_video_task_status(task_id, 3)
-                    print(f"任务 {task_id} 状态更新为出错: {e}")
+                if global_stop_flag.is_set():  # 检查全局停止标志
+                    break
+                task_queue.put(task)  # 将任务加入队列
+            print("任务已加入队列，等待执行。")
 
         except Exception as e:
             print(f"任务调度器出现错误: {e}")
 
-        # 等待 10 秒后重新检查
+        # 每隔 10 秒检查一次
         scheduler_event.wait(10)
 
     print("任务调度器已停止。")
 
-
-def start_scheduler():
-    """启动调度器线程"""
-    scheduler_thread = threading.Thread(target=task_scheduler, daemon=True)
-    scheduler_thread.start()
-    print("任务调度器已启动。")
 
 class VideoTaskUI(tk.Frame):
     def __init__(self, master, app_controller):
@@ -217,25 +231,64 @@ class VideoTaskUI(tk.Frame):
             refresh_tasks()
 
 
-        def toggle_scheduler():
-            """启动或关闭定时任务"""
-            global scheduler_thread, is_scheduler_running
+        # def toggle_scheduler():
+        #     """启动或关闭定时任务"""
+        #     global scheduler_thread, is_scheduler_running
 
-            if not is_scheduler_running:
-                # 启动定时任务
+        #     if not is_scheduler_running:
+        #         # 启动定时任务
+        #         is_scheduler_running = True
+        #         scheduler_event.clear()  # 清除停止标志
+        #         scheduler_thread = threading.Thread(target=task_scheduler, daemon=True)
+        #         scheduler_thread.start()
+        #         scheduler_button.config(text="关闭定时任务")
+        #         print("定时任务已启动。")
+        #     else:
+        #         # 停止定时任务
+        #         is_scheduler_running = False
+        #         scheduler_event.set()  # 设置停止标志
+        #         scheduler_thread = None  # 释放线程引用
+        #         scheduler_button.config(text="启动定时任务")
+        #         print("定时任务已关闭。")
+        def toggle_scheduler():
+            """
+            切换调度器的运行状态：
+            - 如果调度器正在运行，则停止调度器。
+            - 如果调度器未运行，则启动调度器和工作线程。
+            """
+            global is_scheduler_running, scheduler_thread
+
+            if is_scheduler_running:
+                # 停止调度器和任务
+                is_scheduler_running = False
+                global_stop_flag.set()  # 设置全局停止标志
+                scheduler_event.set()  # 设置停止调度标志
+                while not task_queue.empty():
+                    try:
+                        task_queue.get_nowait()  # 清空任务队列
+                        task_queue.task_done()
+                    except queue.Empty:
+                        break
+                print("正在停止所有任务...")
+                scheduler_thread.join()  # 等待调度器线程结束
+                scheduler_button.config(text="开启定时任务")
+                print("任务调度器已停止。")
+            else:
+                # 启动调度器
                 is_scheduler_running = True
-                scheduler_event.clear()  # 清除停止标志
+                global_stop_flag.clear()  # 清除全局停止标志
+                scheduler_event.clear()
+
+                # 启动调度器线程
                 scheduler_thread = threading.Thread(target=task_scheduler, daemon=True)
                 scheduler_thread.start()
+
+                # 启动工作线程
+                for i in range(2):  # 启动两个线程
+                    worker_thread = threading.Thread(target=worker, daemon=True, name=f"Worker-{i+1}")
+                    worker_thread.start()
                 scheduler_button.config(text="关闭定时任务")
-                print("定时任务已启动。")
-            else:
-                # 停止定时任务
-                is_scheduler_running = False
-                scheduler_event.set()  # 设置停止标志
-                scheduler_thread = None  # 释放线程引用
-                scheduler_button.config(text="启动定时任务")
-                print("定时任务已关闭。")
+                print("任务调度器和工作线程已启动。")
 
         # 标题
         tk.Label(main_frame, text="视频任务列表", font=("Arial", 16)).pack(pady=10)
@@ -265,9 +318,9 @@ class VideoTaskUI(tk.Frame):
         button_frame.pack(pady=10, fill="x")
 
         # 手动启动任务按钮
-        tk.Button(button_frame, text="手动启动任务", command=start_task).pack(side="left", padx=5)
+        tk.Button(button_frame, text="开始任务", command=start_task).pack(side="left", padx=5)
         # 手动停止任务按钮
-        tk.Button(button_frame, text="手动停止任务", command=stop_task).pack(side="left", padx=5)
+        tk.Button(button_frame, text="停止任务", command=stop_task).pack(side="left", padx=5)
 
         # 定时任务控制按钮
         scheduler_button = tk.Button(button_frame, text="启动定时任务", command=toggle_scheduler)
