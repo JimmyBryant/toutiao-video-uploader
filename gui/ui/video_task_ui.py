@@ -9,7 +9,8 @@ import queue
 import importlib
 from playwright.sync_api import sync_playwright
 import json
-
+from utils import Logger
+import sys
 
 # 全局任务队列
 task_queue = queue.Queue()
@@ -44,9 +45,11 @@ def process_task(task):
 
         try:
             storage_state = json.loads(login_info)  # 假设 login_info 存储的是 JSON 格式的 Cookie 字符串
+            config = load_config()
+            headless_mode = config.get("headless_mode", True)  # 设置一个默认值以防止异常
             # 使用独立的 Playwright 浏览器上下文
             with sync_playwright() as p:
-                browser = p.chromium.launch(headless=False, args=[
+                browser = p.chromium.launch(headless=headless_mode, args=[
                     "--disable-blink-features=AutomationControlled",
                     "--disable-infobars",
                     "--disable-extensions"
@@ -66,13 +69,7 @@ def process_task(task):
         except Exception as e:
             print(f"任务 {task_id} 上传到 {platform} 用户 {username} 失败：{e}")
             raise
-        finally:
-            # 确保关闭浏览器实例
-            if 'browser' in locals():
-                try:
-                    browser.close()
-                except Exception as e:
-                    print(f"关闭浏览器时发生错误：{e}")
+
 def worker():
     """
     任务队列的工作线程。
@@ -125,11 +122,45 @@ def task_scheduler():
 
     print("任务调度器已停止。")
 
+CONFIG_FILE = "settings.json"
+
+def load_config():
+    """加载配置文件"""
+    try:
+        with open(CONFIG_FILE, "r") as file:
+            return json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        # 如果文件不存在或解析失败，返回默认配置
+        return {
+            "headless_mode": True,
+            "worker_threads": 2
+        }
+
+def save_config(config):
+    """保存配置到文件"""
+    with open(CONFIG_FILE, "w") as file:
+        json.dump(config, file, indent=4)
 
 class VideoTaskUI(tk.Frame):
     def __init__(self, master, app_controller):
         super().__init__(master)
         self.app_controller = app_controller
+        self.config = load_config()  # 加载配置文件
+
+    def update_headless_mode(self):
+        """更新 Headless 模式到配置文件"""
+        self.config["headless_mode"] = self.headless_var.get()
+        save_config(self.config)
+
+    def update_worker_threads(self, *args):
+        """更新工作线程数量到配置文件"""
+        try:
+            value = int(self.worker_threads_var.get())
+            if value > 0:  # 确保线程数量为正整数
+                self.config["worker_threads"] = value
+                save_config(self.config)
+        except ValueError:
+            pass  # 忽略无效输入        
     def show_video_tasks(self):
         """显示所有视频发布任务的界面"""
         main_frame = self
@@ -168,6 +199,13 @@ class VideoTaskUI(tk.Frame):
                 # 插入到任务表中
                 task_tree.insert("", "end", values=(task_data[0], task_data[1], user_group_name, user_name, task_data[8], task_data[9]))
 
+        def show_log():
+            """显示日志"""
+            log_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        def hide_log():
+            """隐藏日志"""
+            log_frame.pack_forget()
+
         def start_task():
             """手动启动选中的任务"""
             selected_item = task_tree.selection()
@@ -181,14 +219,15 @@ class VideoTaskUI(tk.Frame):
             if not task:
                 messagebox.showerror("错误", "未找到对应任务")
                 return
-
+            
             if task[9] == 0:  # 未执行 -> 执行中
                 try:
+                    print(f"任务 {task[0]} 已手动启动。")
                     update_video_task_status(task[0], 1)  # 更新任务状态为执行中
                     process_task(task)  # 执行任务逻辑
-                    print(f"任务 {task[0]} 已手动启动。")
                     # 如果任务执行成功，更新状态为“已完成”
                     update_video_task_status(task[0], 2)
+                    print(f"任务 {task[0]} 已完成。")
                 except Exception as e:
                     # 捕获任务失败的异常并更新状态为“出错”
                     update_video_task_status(task[0], 3)
@@ -284,7 +323,7 @@ class VideoTaskUI(tk.Frame):
                 scheduler_thread.start()
 
                 # 启动工作线程
-                for i in range(2):  # 启动两个线程
+                for i in range(self.config.worker_count):  # 启动多个线程
                     worker_thread = threading.Thread(target=worker, daemon=True, name=f"Worker-{i+1}")
                     worker_thread.start()
                 scheduler_button.config(text="关闭定时任务")
@@ -292,6 +331,31 @@ class VideoTaskUI(tk.Frame):
 
         # 标题
         tk.Label(main_frame, text="视频任务列表", font=("Arial", 16)).pack(pady=10)
+
+        # 设置区域
+        settings_frame = tk.Frame(main_frame)
+        settings_frame.pack(pady=10, fill="x")
+
+        # Headless 模式
+        tk.Label(settings_frame, text="Headless 模式:").pack(side="left", padx=5)
+        self.headless_var = tk.BooleanVar(value=self.config["headless_mode"])
+        headless_checkbox = ttk.Checkbutton(
+            settings_frame,
+            variable=self.headless_var,
+            command=self.update_headless_mode
+        )
+        headless_checkbox.pack(side="left")
+
+        # 工作线程数量
+        tk.Label(settings_frame, text="工作线程数量:").pack(side="left", padx=5)
+        self.worker_threads_var = tk.IntVar(value=self.config["worker_threads"])
+        worker_threads_entry = ttk.Entry(
+            settings_frame,
+            textvariable=self.worker_threads_var,
+            width=5
+        )
+        worker_threads_entry.pack(side="left", padx=5)
+        self.worker_threads_var.trace_add("write", self.update_worker_threads)
 
         # 定义显示的列
         columns = ("id", "video_title", "user_group", "user", "scheduled_time", "status")
@@ -312,6 +376,18 @@ class VideoTaskUI(tk.Frame):
             task_tree.column(col, width=120, anchor="center")  # 设置列宽和对齐方式
 
         task_tree.pack(fill="both", expand=True)
+
+        # 日志区域
+        log_frame = tk.Frame(main_frame)
+        log_frame.pack(pady=10, fill="both", expand=True)
+
+        tk.Label(log_frame, text="任务日志", font=("Arial", 12)).pack(anchor="w", padx=10)
+        log_text = tk.Text(log_frame, height=10, state="normal")
+        log_text.pack(fill="both", expand=True, padx=10, pady=5)
+        # 默认隐藏日志区域
+        # log_frame.pack_forget()
+        # 定义日志功能
+        sys.stdout = Logger(log_text)  # 重定向标准输出
 
         # 按钮区域
         button_frame = tk.Frame(main_frame)

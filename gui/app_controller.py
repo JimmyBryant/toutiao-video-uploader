@@ -2,6 +2,7 @@ from ui.main_menu_ui import MainMenuUI
 from ui.user_ui import UserUI
 from ui.video_task_ui import VideoTaskUI
 from ui.user_group_ui import UserGroupUI
+import sys
 
 class AppController:
     def __init__(self, main_frame):
@@ -10,6 +11,8 @@ class AppController:
 
     def show_frame(self, frame_class, method_name=None, *args, **kwargs):
         """切换到指定的界面，并根据需要调用特定的方法"""
+        # 在切换界面前重置 stdout
+        sys.stdout = sys.__stdout__
         if self.current_frame:
             self.current_frame.destroy()
         self.current_frame = frame_class(self.main_frame, self)

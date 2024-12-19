@@ -42,7 +42,7 @@ def upload_video(task, context):
        # 实时检查上传进度
         print("[YouTube] 检查上传进度...")
         check_upload_progress(page)
-        
+
         # 点击Not For Kids Radio
         radios = page.locator('#radioContainer')
         if(radios.count()>1):
@@ -93,13 +93,15 @@ def check_upload_progress(page):
     """
     last_progress = ""
     start_time = time.time()
-
+    # 定义完成上传的关键字
+    completed_keywords = ["100%", "上传完毕", "正在检查", "检查完毕"]
     while True:
         progress_label = page.locator(".progress-label.ytcp-video-upload-progress")
         progress_text = progress_label.inner_text() if progress_label.count() > 0 else ""
         print(f"[YouTube] 上传进度: {progress_text}")
 
-        if "100%" in progress_text:
+        # 判断是否完成上传
+        if any(keyword in progress_text for keyword in completed_keywords):
             print("[YouTube] 上传完成!")
             break
 
