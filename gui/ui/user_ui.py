@@ -170,22 +170,22 @@ class UserUI(tk.Frame):
             # 绑定 Treeview 的选择事件
             tree.bind("<<TreeviewSelect>>", on_tree_select)
 
-            # 底部按钮区域
-            bottom_frame = tk.Frame(main_frame)
-            bottom_frame.pack(fill="x")
+        # 底部按钮区域
+        bottom_frame = tk.Frame(main_frame)
+        bottom_frame.pack(fill="x")
 
-            # 创建编辑和删除按钮的子区域，默认隐藏
-            action_frame = tk.Frame(bottom_frame)
-            action_frame.pack(side="top", pady=10, fill="x")  # 确保它在最上面
+        # 创建编辑和删除按钮的子区域，默认隐藏
+        action_frame = tk.Frame(bottom_frame)
+        action_frame.pack(side="top", pady=10, fill="x")  # 确保它在最上面
 
-            user_id = tk.StringVar()  # 存储选中用户的ID
-            edit_button = tk.Button(action_frame, text="编辑", command=edit_user)
-            edit_button.pack(side="left", padx=10)
-            delete_button = tk.Button(action_frame, text="删除", command=delete_user)
-            delete_button.pack(side="left", padx=10)
+        user_id = tk.StringVar()  # 存储选中用户的ID
+        edit_button = tk.Button(action_frame, text="编辑", command=edit_user)
+        edit_button.pack(side="left", padx=10)
+        delete_button = tk.Button(action_frame, text="删除", command=delete_user)
+        delete_button.pack(side="left", padx=10)
 
-            tk.Button(action_frame, text="返回主界面", command=self.app_controller.show_main_menu).pack(side="right", padx=10)
-            tk.Button(action_frame, text="添加用户", command=self.app_controller.show_add_user).pack(side="right", padx=10)
+        tk.Button(action_frame, text="返回主界面", command=self.app_controller.show_main_menu).pack(side="right", padx=10)
+        tk.Button(action_frame, text="添加用户", command=self.app_controller.show_add_user).pack(side="right", padx=10)
 
     def show_add_user(self):
         """显示添加用户功能界面"""

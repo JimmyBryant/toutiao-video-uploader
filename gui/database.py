@@ -2,7 +2,7 @@ import sqlite3
 import datetime
 
 # 数据库文件路径
-DB_FILE = "user_data.db"
+DB_FILE = "app_data.db"
 
 def initialize_database():
     """初始化数据库并创建必要的表"""

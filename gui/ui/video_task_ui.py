@@ -336,6 +336,10 @@ class VideoTaskUI(tk.Frame):
         settings_frame = tk.Frame(main_frame)
         settings_frame.pack(pady=10, fill="x")
 
+        # 新建用户
+        tk.Button(settings_frame, text="新建用户组", command=self.app_controller.show_add_user).pack(side="right", padx=10)
+        tk.Button(settings_frame, text="新建用户", command=self.app_controller.show_add_user_group).pack(side="right", padx=10)
+
         # Headless 模式
         tk.Label(settings_frame, text="Headless 模式:").pack(side="left", padx=5)
         self.headless_var = tk.BooleanVar(value=self.config["headless_mode"])

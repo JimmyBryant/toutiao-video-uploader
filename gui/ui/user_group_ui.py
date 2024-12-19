@@ -57,10 +57,10 @@ class UserGroupUI(tk.Frame):
         bottom_frame = tk.Frame(main_frame)
         bottom_frame.pack(pady=10)
 
-        tk.Button(bottom_frame, "添加用户组", "default", command=add_group).pack(side="left", padx=10)
-        tk.Button(bottom_frame, "编辑用户组", "default", command=edit_group).pack(side="left", padx=10)
-        tk.Button(bottom_frame, "删除用户组", "default", command=delete_group).pack(side="left", padx=10)
-        tk.Button(bottom_frame, "返回主菜单", "default", command=self.app_controller.show_main_menu).pack(side="left", padx=10)
+        tk.Button(bottom_frame, text="添加用户组", command=add_group).pack(side="left", padx=10)
+        tk.Button(bottom_frame, text="编辑用户组", command=edit_group).pack(side="left", padx=10)
+        tk.Button(bottom_frame, text="删除用户组", command=delete_group).pack(side="left", padx=10)
+        tk.Button(bottom_frame, text="返回主菜单", command=self.app_controller.show_main_menu).pack(side="left", padx=10)
 
     def add_user_group_and_refresh(self, group_name_entry, users_listbox, users):
         """保存用户组并刷新界面"""
@@ -110,15 +110,13 @@ class UserGroupUI(tk.Frame):
 
         # 保存用户组按钮
         tk.Button(
-            bottom_frame, "创建用户组",
-            "default",
+            bottom_frame, text="创建用户组",
             command=lambda: self.add_user_group_and_refresh(group_name_entry, users_listbox, users)
         ).pack(side="left", padx=10)
 
         # 返回按钮
         tk.Button(
-            bottom_frame, "返回",
-            "default",
+            bottom_frame, text="返回",
             command=self.app_controller.show_user_groups
         ).pack(side="left", padx=10)
 
@@ -180,5 +178,5 @@ class UserGroupUI(tk.Frame):
         bottom_frame = tk.Frame(main_frame)
         bottom_frame.pack(pady=10)
 
-        tk.Button(bottom_frame, "保存", "default", command=lambda: save_edited_group(group_id,group_name_entry, users_listbox, all_users)).pack(side="left", padx=10)
-        tk.Button(bottom_frame, "返回", "default", command=self.app_controller.show_user_groups).pack(side="left", padx=10)
+        tk.Button(bottom_frame, text="保存", command=lambda: save_edited_group(group_id,group_name_entry, users_listbox, all_users)).pack(side="left", padx=10)
+        tk.Button(bottom_frame, text="返回", command=self.app_controller.show_user_groups).pack(side="left", padx=10)
