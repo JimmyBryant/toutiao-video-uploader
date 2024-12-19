@@ -4,3 +4,6 @@ data/
 __pycache__/
 data.json
 .DS_Store
+build/
+dist/
+playwrite_gui/
