@@ -2,17 +2,148 @@ import tkinter as tk
 from tkinter import ttk, messagebox, Text
 from database import fetch_all_users, fetch_user_by_id, add_user, delete_user_by_id, update_user,fetch_all_user_groups,fetch_group_members
 from playwright.sync_api import sync_playwright
+from playwright.async_api import async_playwright
 import json
 import os
 from utils import load_config
+import asyncio
+import threading
+
+async def open_login_page_async(platform, get_login_button, save_cookie_button, browser_dict):
+    """
+    打开指定平台的登录页面（异步模式）
+    :param platform: 平台名称
+    :param get_login_button: "获取登录信息"按钮
+    :param save_cookie_button: "保存登录信息"按钮
+    :param browser_dict: 用于存储 Playwright 对象的字典
+    """
+    # 平台登录地址
+    login_urls = {
+        "Bilibili": "https://www.bilibili.com",
+        "Toutiao": "https://www.toutiao.com",
+        "Douyin": "https://www.douyin.com",
+        "YouTube": "https://www.youtube.com",
+        "TikTok": "https://www.tiktok.com"
+    }
+
+    if platform not in login_urls:
+        messagebox.showerror("错误", f"不支持的平台：{platform}")
+        return
+
+    login_url = login_urls[platform]
+    config = load_config()  # 假设 `load_config` 函数返回一个包含配置的字典
+    chromium_path = config.get("chromium_path", "").strip()  # 获取 Chromium 路径
+
+    playwright = None
+    browser = None
+
+    try:
+        # 启动 Playwright
+        playwright = await async_playwright().start()
+
+        # 浏览器启动参数
+        launch_args = {
+            "headless": False,
+            "args": [
+                "--disable-blink-features=AutomationControlled",
+                "--disable-infobars",
+                "--disable-extensions"
+            ]
+        }
+        if chromium_path:
+            if not os.path.isfile(chromium_path):
+                raise FileNotFoundError(f"Chromium 可执行文件未找到：{chromium_path}")
+            launch_args["executable_path"] = chromium_path
+
+        browser = await playwright.chromium.launch(**launch_args)
+        context = await browser.new_context(
+            user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+        )
+        page = await context.new_page()
+
+        # 修改 navigator.webdriver 属性
+        await page.evaluate("() => { Object.defineProperty(navigator, 'webdriver', { get: () => undefined }) }")
+
+        # 打开登录页面
+        await page.goto(login_url)
+        messagebox.showinfo("提示", "请在浏览器中完成登录，然后点击“保存登录信息”")
+
+        # 暂存 Playwright 对象
+        browser_dict.update({
+            "playwright": playwright,
+            "browser": browser,
+            "context": context,
+            "page": page
+        })
+
+        # 切换按钮状态
+        get_login_button.config(state="disabled", text="更新登录信息")
+        save_cookie_button.config(state="normal")
+
+    except FileNotFoundError as e:
+        messagebox.showerror("错误", str(e))
+    except Exception as e:
+        messagebox.showerror("错误", f"无法打开登录页面：{e}")
+        if browser:
+            await browser.close()
+        if playwright:
+            await playwright.stop()
+
+# 包装器函数：从 Tkinter 调用异步函数
+def open_login_page(platform, get_login_button, save_cookie_button, browser_dict):
+    asyncio.create_task(open_login_page_async(platform, get_login_button, save_cookie_button, browser_dict))
+
+async def save_cookies_async(browser_dict, save_cookie_button, get_login_button, cookie_textarea):
+    try:
+        if "context" in browser_dict:
+            context = browser_dict["context"]
+
+            # 保存 Storage State
+            try:
+                storage_state = await context.storage_state(path="storage_state.json")  # 可选：保存到文件
+                print(f"Storage state 保存成功：{storage_state}")
+            except Exception as e:
+                raise Exception(f"无法保存 Storage State：{e}")
+
+            # 将 storage_state 转换为 JSON 格式的字符串
+            storage_state_json = json.dumps(storage_state)
+
+            # 更新 TextArea 的内容
+            cookie_textarea.config(state="normal")  # 解锁 Text 框
+            cookie_textarea.delete("1.0", "end")    # 清空内容
+            cookie_textarea.insert("1.0", storage_state_json)  # 插入 Storage State 数据
+            cookie_textarea.config(state="disabled")  # 设置为只读
+
+            # 关闭浏览器
+            await browser_dict["browser"].close()
+            await browser_dict["playwright"].stop()
+
+            # 清除浏览器对象
+            browser_dict.clear()
+
+            # 切换按钮状态
+            save_cookie_button.config(state="disabled")
+            get_login_button.config(state="normal", text="获取登录信息")
+            messagebox.showinfo("成功", "登录信息已成功保存！")
+        else:
+            raise Exception("未找到浏览器上下文，无法保存登录信息")
+    except Exception as e:
+        messagebox.showerror("错误", f"保存登录信息时出错：{e}")
+
+# 包装为同步调用
+def save_cookies(browser_dict, save_cookie_button, get_login_button, cookie_textarea):
+    asyncio.create_task(save_cookies_async(browser_dict, save_cookie_button, get_login_button, cookie_textarea))
+
+
+
 # 打开对应平台的登录页面
 def open_login_page(platform, get_login_button, save_cookie_button, browser_dict):
     login_urls = {
         "Bilibili": "https://passport.bilibili.com/login",
-        "Toutiao": "https://www.toutiao.com/login",
-        "Douyin": "https://www.douyin.com/login",
+        "Toutiao": "https://www.toutiao.com",
+        "Douyin": "https://www.douyin.com",
         "YouTube": "https://accounts.google.com/signin",
-        "TikTok": "https://www.tiktok.com/login"
+        "TikTok": "https://www.tiktok.com"
     }
 
     if platform not in login_urls:
@@ -35,7 +166,9 @@ def open_login_page(platform, get_login_button, save_cookie_button, browser_dict
                 "--disable-extensions"
             ]
         }
-        if chromium_path and os.path.isfile(chromium_path):  # 确保路径存在且有效
+        if chromium_path:
+            if not os.path.isfile(chromium_path):
+                raise FileNotFoundError(f"Chromium 可执行文件未找到：{chromium_path}")
             launch_args["executable_path"] = chromium_path
         browser = playwright.chromium.launch(**launch_args)
         context = browser.new_context(
@@ -63,7 +196,7 @@ def open_login_page(platform, get_login_button, save_cookie_button, browser_dict
         messagebox.showerror("错误", f"无法打开登录页面：{e}")
 
 # 保存 Storage State 并关闭浏览器
-def save_cookies(browser_dict, save_cookie_button, get_login_button, username_entry, cookie_textarea):
+def save_cookies(browser_dict, save_cookie_button, get_login_button, cookie_textarea):
     try:
         if "context" in browser_dict:
             context = browser_dict["context"]
@@ -71,8 +204,6 @@ def save_cookies(browser_dict, save_cookie_button, get_login_button, username_en
             storage_state = context.storage_state()
             # 将 storage_state 转换为 JSON 格式的字符串
             storage_state_json = json.dumps(storage_state)
-            
-            username_entry.login_info = storage_state_json  # 存储为用户的登录信息
 
             # 更新 TextArea 的内容
             cookie_textarea.config(state="normal")  # 解锁 Text 框
@@ -233,7 +364,7 @@ class UserUI(tk.Frame):
 
         # 保存 Cookie 按钮
         save_cookie_button = tk.Button(form_frame, text="保存 Cookie", state="disabled",
-                                        command=lambda: save_cookies(browser_dict, save_cookie_button, get_login_button, username_entry, cookie_textarea))
+                                        command=lambda: save_cookies(browser_dict, save_cookie_button, get_login_button, cookie_textarea))
         save_cookie_button.grid(row=3, column=1, pady=10, padx=10)
 
         # 底部按钮区域

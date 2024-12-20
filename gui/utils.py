@@ -1,8 +1,9 @@
 # utils.py
 import sys
 import json
+import os
 
-CONFIG_FILE = "../settings.json"
+CONFIG_FILE = "settings.json"
 
 def load_config():
     """加载配置文件"""
