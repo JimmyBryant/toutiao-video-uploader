@@ -9,7 +9,7 @@ import queue
 import importlib
 from playwright.sync_api import sync_playwright
 import json
-from utils import Logger
+from utils import Logger, load_config
 import sys
 
 # 全局任务队列
@@ -47,6 +47,7 @@ def process_task(task):
             storage_state = json.loads(login_info)  # 假设 login_info 存储的是 JSON 格式的 Cookie 字符串
             config = load_config()
             headless_mode = config.get("headless_mode", True)  # 设置一个默认值以防止异常
+            chromium_path = config.get("chromium_path", "")
             # 使用独立的 Playwright 浏览器上下文
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=headless_mode, args=[
@@ -122,45 +123,13 @@ def task_scheduler():
 
     print("任务调度器已停止。")
 
-CONFIG_FILE = "settings.json"
 
-def load_config():
-    """加载配置文件"""
-    try:
-        with open(CONFIG_FILE, "r") as file:
-            return json.load(file)
-    except (FileNotFoundError, json.JSONDecodeError):
-        # 如果文件不存在或解析失败，返回默认配置
-        return {
-            "headless_mode": True,
-            "worker_threads": 2
-        }
-
-def save_config(config):
-    """保存配置到文件"""
-    with open(CONFIG_FILE, "w") as file:
-        json.dump(config, file, indent=4)
 
 class VideoTaskUI(tk.Frame):
     def __init__(self, master, app_controller):
         super().__init__(master)
         self.app_controller = app_controller
-        self.config = load_config()  # 加载配置文件
-
-    def update_headless_mode(self):
-        """更新 Headless 模式到配置文件"""
-        self.config["headless_mode"] = self.headless_var.get()
-        save_config(self.config)
-
-    def update_worker_threads(self, *args):
-        """更新工作线程数量到配置文件"""
-        try:
-            value = int(self.worker_threads_var.get())
-            if value > 0:  # 确保线程数量为正整数
-                self.config["worker_threads"] = value
-                save_config(self.config)
-        except ValueError:
-            pass  # 忽略无效输入        
+     
     def show_video_tasks(self):
         """显示所有视频发布任务的界面"""
         main_frame = self
@@ -337,29 +306,8 @@ class VideoTaskUI(tk.Frame):
         settings_frame.pack(pady=10, fill="x")
 
         # 新建用户
-        tk.Button(settings_frame, text="新建用户组", command=self.app_controller.show_add_user).pack(side="right", padx=10)
-        tk.Button(settings_frame, text="新建用户", command=self.app_controller.show_add_user_group).pack(side="right", padx=10)
-
-        # Headless 模式
-        tk.Label(settings_frame, text="Headless 模式:").pack(side="left", padx=5)
-        self.headless_var = tk.BooleanVar(value=self.config["headless_mode"])
-        headless_checkbox = ttk.Checkbutton(
-            settings_frame,
-            variable=self.headless_var,
-            command=self.update_headless_mode
-        )
-        headless_checkbox.pack(side="left")
-
-        # 工作线程数量
-        tk.Label(settings_frame, text="工作线程数量:").pack(side="left", padx=5)
-        self.worker_threads_var = tk.IntVar(value=self.config["worker_threads"])
-        worker_threads_entry = ttk.Entry(
-            settings_frame,
-            textvariable=self.worker_threads_var,
-            width=5
-        )
-        worker_threads_entry.pack(side="left", padx=5)
-        self.worker_threads_var.trace_add("write", self.update_worker_threads)
+        tk.Button(settings_frame, text="新建用户组", command=self.app_controller.show_add_user_group).pack(side="right", padx=10)
+        tk.Button(settings_frame, text="新建用户", command=self.app_controller.show_add_user).pack(side="right", padx=10)
 
         # 定义显示的列
         columns = ("id", "video_title", "user_group", "user", "scheduled_time", "status")

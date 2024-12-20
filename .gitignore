@@ -7,3 +7,5 @@ data.json
 build/
 dist/
 playwrite_gui/
+*.db
+*.spec

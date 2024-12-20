@@ -1,10 +1,16 @@
 altgraph==0.17.4
+autocommand==2.2.2
 greenlet==3.1.1
+jaraco.context==6.0.1
+jaraco.functools==4.1.0
+jaraco.text==4.0.0
 macholib==1.16.3
 modulegraph==0.19.6
+more-itertools==10.5.0
 packaging==24.2
 playwright==1.49.1
-py2app==0.28.8
 pyee==12.0.0
+pyinstaller==6.11.1
+pyinstaller-hooks-contrib==2024.10
 setuptools==75.6.0
 typing_extensions==4.12.2

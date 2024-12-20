@@ -3,6 +3,8 @@ from tkinter import ttk, messagebox, Text
 from database import fetch_all_users, fetch_user_by_id, add_user, delete_user_by_id, update_user,fetch_all_user_groups,fetch_group_members
 from playwright.sync_api import sync_playwright
 import json
+import os
+from utils import load_config
 # 打开对应平台的登录页面
 def open_login_page(platform, get_login_button, save_cookie_button, browser_dict):
     login_urls = {
@@ -18,15 +20,24 @@ def open_login_page(platform, get_login_button, save_cookie_button, browser_dict
         return
 
     login_url = login_urls[platform]
+    config = load_config()
+    chromium_path = config.get("chromium_path", "").strip()  # 获取 Chromium 路径
 
     try:
         # 启动 Playwright 浏览器
         playwright = sync_playwright().start()
-        browser = playwright.chromium.launch(headless=False, args=[
-            "--disable-blink-features=AutomationControlled",
-            "--disable-infobars",
-            "--disable-extensions"
-        ])
+        # 判断是否需要指定 executable_path
+        launch_args = {
+            "headless": False,
+            "args": [
+                "--disable-blink-features=AutomationControlled",
+                "--disable-infobars",
+                "--disable-extensions"
+            ]
+        }
+        if chromium_path and os.path.isfile(chromium_path):  # 确保路径存在且有效
+            launch_args["executable_path"] = chromium_path
+        browser = playwright.chromium.launch(**launch_args)
         context = browser.new_context(
             user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
         )

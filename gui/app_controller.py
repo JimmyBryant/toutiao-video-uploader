@@ -2,6 +2,7 @@ from ui.main_menu_ui import MainMenuUI
 from ui.user_ui import UserUI
 from ui.video_task_ui import VideoTaskUI
 from ui.user_group_ui import UserGroupUI
+from ui.setting_ui import SettingUI
 import sys
 
 class AppController:
@@ -53,4 +54,7 @@ class AppController:
     
     def show_edit_user_group(self, group_id):
         self.show_frame(UserGroupUI,'show_edit_user_group', group_id)
+    
+    def show_settings(self):
+        self.show_frame(SettingUI,'show_settings')
     

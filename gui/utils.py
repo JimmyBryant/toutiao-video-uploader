@@ -1,6 +1,26 @@
 # utils.py
 import sys
+import json
 
+CONFIG_FILE = "../settings.json"
+
+def load_config():
+    """加载配置文件"""
+    try:
+        with open(CONFIG_FILE, "r") as file:
+            return json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        # 如果文件不存在或解析失败，返回默认配置
+        return {
+            "chromium_path": "",
+            "headless_mode": True,
+            "worker_threads": 2
+        }
+
+def save_config(config):
+    """保存配置到文件"""
+    with open(CONFIG_FILE, "w") as file:
+        json.dump(config, file, indent=4)
 
 class Logger:
     def __init__(self, text_widget):
