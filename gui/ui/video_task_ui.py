@@ -23,16 +23,53 @@ scheduler_event = threading.Event()  # 全局事件，用于控制线程停止
 is_scheduler_running = False  # 定时任务状态
 global_stop_flag = threading.Event()  # 添加全局停止标志
 
+class TaskManager:
+    def __init__(self):
+        self.running_tasks = {}
+        self.lock = Lock()
+
+    def is_task_running(self, task_id): 
+        print(f"检查任务 {task_id} 是否在运行")
+        return task_id in self.running_tasks
+
+    def add_task(self, task_id, task):
+        with self.lock:
+            task_running = self.is_task_running(task_id)
+            if task_running:
+                raise ValueError(f"任务 {task_id} 已经在运行中，无法重复添加。")
+            self.running_tasks[task_id] = task
+            print(f"任务 {task_id} 已添加到 running_tasks")
+
+    def remove_task(self, task_id):
+        with self.lock:
+            self.running_tasks.pop(task_id, None)
+
+    def get_task_by_id(self, task_id):
+        with self.lock:
+            return self.running_tasks.get(task_id)
+
+    
+task_manager = TaskManager()
+
 async def process_task_async(task):
     """
     处理单个视频任务。根据平台动态调用对应的 upload_video 函数（异步）。
     """
     task_id, video_title, video_desc, video_path, cover_path, video_tags, user_group_id, user_id, scheduled_time, status = task
 
+    if task_manager.is_task_running(task_id):
+        print(f"任务 {task_id} 已在运行，跳过执行。")
+        return
+    
+    task_manager.add_task(task_id, asyncio.current_task())
+
+    print(f"添加任务到task manager {task_id}...")
+
     # 确定用户列表
     if user_group_id:
         # 获取用户组中的所有用户
         users = fetch_user_group_members_by_id(user_group_id)
+
     elif user_id:
         # 单个用户任务
         user = fetch_user_by_id(user_id)
@@ -85,9 +122,11 @@ async def process_task_async(task):
             update_video_task_status(task[0], 3)  # 失败后更新状态
             print(f"任务 {task_id} 上传到 {platform} 用户 {username} 失败：{e}")
             raise
-
+        finally:
+            print(f"任务 {task_id} 已完成。")
+            task_manager.remove_task(task_id)            
 # 包装器函数：从同步调用转换为异步调用
-# def process_task(task):
+def process_task(task):
     task_obj = asyncio.create_task(process_task_async(task))
     task_obj.add_done_callback(handle_task_result)
 
@@ -220,7 +259,6 @@ class VideoTaskUI(tk.Frame):
     def __init__(self, master, app_controller):
         super().__init__(master)
         self.app_controller = app_controller
-        self.running_tasks = {}
         self.loop_lock = Lock()
         self.async_loop = None
         self._start_async_loop()
@@ -294,6 +332,10 @@ class VideoTaskUI(tk.Frame):
                 messagebox.showerror("错误", "未找到对应任务")
                 return
             
+            if task_manager.is_task_running(task_id):
+                messagebox.showinfo("提示", "该任务已经在运行中。")
+                return  
+                    
             if task[9] == 0:  # 未执行 -> 执行中
                 try:
                     print(f"任务 {task[0]} 已手动启动。")
@@ -305,16 +347,13 @@ class VideoTaskUI(tk.Frame):
                             raise RuntimeError("异步事件循环尚未初始化")
                         # 定义任务完成后的回调函数
                         def task_done_callback(fut):
-                            """任务完成后清理状态"""
-                            self.running_tasks.pop(task_id, None)
-                            print(f"任务 {task_id} 已完成并清理。")
+                            refresh_tasks()
+                            print(f"任务 {task_id} 已完，状态更新")
 
                         # 提交任务到事件循环
                         def submit_task():
                             async_task = self.async_loop.create_task(process_task_async(task))
                             async_task.add_done_callback(task_done_callback)
-                            # 将任务存储在 running_tasks 字典中
-                            self.running_tasks[task_id] = async_task
                             print(f"任务 {task_id} 已提交到事件循环。")
 
                         # 安全提交任务到事件循环
@@ -361,8 +400,8 @@ class VideoTaskUI(tk.Frame):
                             raise RuntimeError("异步事件循环尚未初始化")
                         
                         # 检查任务是否在 running_tasks 中
-                        if task_id in self.running_tasks:
-                            running_task = self.running_tasks[task_id]
+                        if task_manager.is_task_running(task_id):
+                            running_task = task_manager.get_task_by_id(task_id)
                             try:
                                 running_task.cancel()  # 尝试取消任务
                                 print(f"任务 {task_id} 正在取消...")
@@ -371,7 +410,7 @@ class VideoTaskUI(tk.Frame):
                                 raise
                             finally:
                                 # 确保任务从字典中移除
-                                del self.running_tasks[task_id]
+                                task_manager.remove_task(task_id)
                                 print(f"任务 {task_id} 已从运行列表中移除。")
                         else:
                             raise RuntimeError(f"任务 {task_id} 未在运行状态")

@@ -1,5 +1,6 @@
 import asyncio
 import time
+from asyncio import get_running_loop
 async def upload_video(task, context):
     """
     使用 Playwright 在 YouTube 发布视频（异步版本）
@@ -20,10 +21,10 @@ async def upload_video(task, context):
         print("[YouTube] 页面加载完成")
         
         # 等待上传页面加载完成
-        await page.locator('input[type="file"]').wait_for()
+        await page.locator('input[type="file"]').wait_for(state='attached')
 
         # 上传视频文件
-        print("[YouTube] 正在上传视频文件...")
+        print("[YouTube] 正在上传视频文件...",video_path)
         await page.set_input_files('input[type="file"]', video_path)
         await asyncio.sleep(5)  # 异步等待上传开始
 
@@ -84,26 +85,23 @@ async def upload_video(task, context):
         raise e
 
 async def check_upload_progress(page):
-    """
-    检查视频上传进度，直到上传完成或检测到 2 分钟内无进度变化（异步版本）
-    :param page: Playwright 的页面对象
-    """
     last_progress = ""
-    start_time = time.time()
-    # 定义完成上传的关键字
-    completed_keywords = ["100%", "上传完毕", "正在检查", "检查完毕"]
-    
+    start_time = get_running_loop().time()  # 异步时间
+    completed_keywords = ["100%", "上传完毕", "正在检查", "检查完毕", "Upload complete", "Checking"]
+
     while True:
         progress_label = page.locator(".progress-label.ytcp-video-upload-progress")
         progress_text = await progress_label.inner_text() if await progress_label.count() > 0 else ""
         print(f"[YouTube] 上传进度: {progress_text}")
 
-        # 判断是否完成上传
         if any(keyword in progress_text for keyword in completed_keywords):
             print("[YouTube] 上传完成!")
             break
+        
+        if progress_text != last_progress:
+            start_time = get_running_loop().time()  # 更新 start_time 在进度变化时
 
-        if progress_text == last_progress and time.time() - start_time > 120:
+        if progress_text == last_progress and get_running_loop().time() - start_time > 120:
             raise Exception("[YouTube] 上传进度在 2 分钟内没有变化，可能是网络问题。")
 
         last_progress = progress_text
