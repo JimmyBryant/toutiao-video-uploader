@@ -47,6 +47,17 @@ def upload_video(page, video_path, title, tags, cover_path):
     title_input = page.wait_for_selector('input[class*="xigua-input"]')
     title_input.fill(title)
     print("标题填写完成")
+    time.sleep(1)
+
+    # 查找按钮
+    button = page.locator('button:has-text("立即开通")')
+    # 检查按钮是否存在
+    if  button.count() > 0:
+        # 存在按钮时触发点击
+        print("按钮存在，准备点击...")
+        button.click()
+    else:
+        print("按钮不存在，跳过操作。")
 
     # 输入视频标签
     if tags:
