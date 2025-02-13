@@ -61,16 +61,17 @@ def upload_video(page, video_path, title, tags, cover_path):
 
     # 输入视频标签
     if tags:
-        print("填写视频标签...")
-        for tag in tags:
-            tag_input = page.locator('input.arco-input-tag-input')
-            tag_input.click()
-            tag_input.fill(tag)
-            time.sleep(1)
-            tag_input.press("Enter")
-            time.sleep(1)
-            tag_input.press("Enter")
-            print(f"添加标签: {tag}")
+        tag_input = page.locator('input.arco-input-tag-input')
+        if tag_input.count() > 0:
+            print("填写视频标签...")
+            for tag in tags:
+                tag_input.click()
+                tag_input.fill(tag)
+                time.sleep(1)
+                tag_input.press("Enter")
+                time.sleep(1)
+                tag_input.press("Enter")
+                print(f"添加标签: {tag}")
 
     # 等待视频上传成功
     wait_for_upload_progress(page)
@@ -80,6 +81,7 @@ def upload_video(page, video_path, title, tags, cover_path):
     page.locator('.fake-upload-trigger').click()  # 点击封面上传按钮
     page.locator('li:has-text("本地上传")').click()  # 选择本地上传
     upload_cover_image(page,cover_path)
+
     # 发布视频
     publish_video(page)
 
@@ -183,13 +185,19 @@ def publish_video(page):
     print("发布按钮已点击")
 
     # 4. 等待跳转到任意一个成功页面
+    # 预期的跳转 URL
+    expected_urls = [
+        '/profile_v4/xigua/small-video',
+        '/profile_v4/xigua/content-manage-v2'
+    ]
+
+    # 5. 使用 Playwright 的 wait_for_url 方法等待跳转
     try:
-        page.wait_for_url(
-            "https://mp.toutiao.com/profile_v4/xigua/content-manage-v2",
-            timeout=60000  # 设置超时时间，例如 60 秒
-        )
-        print("发布成功，页面已跳转到内容管理页面")
+        page.wait_for_url(lambda url: any(expected_url in url for expected_url in expected_urls), timeout=10000)  # 10 秒超时
+        current_url = page.url()
+        print(f"视频发布成功，跳转到预期页面: {current_url}")
+        return  # 发布成功，退出函数
     except Exception as e:
-        print(f"发布失败或页面未跳转，错误: {e}")
-        raise e
+        print(f"等待页面跳转超时或失败: {e}")
+
         
