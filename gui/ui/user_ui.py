@@ -130,10 +130,9 @@ async def save_cookies_async(browser_dict, save_cookie_button, get_login_button,
     except Exception as e:
         messagebox.showerror("错误", f"保存登录信息时出错：{e}")
 
-# 包装为同步调用
-def save_cookies(browser_dict, save_cookie_button, get_login_button, cookie_textarea):
-    asyncio.create_task(save_cookies_async(browser_dict, save_cookie_button, get_login_button, cookie_textarea))
-
+# # 包装为同步调用
+# def save_cookies(browser_dict, save_cookie_button, get_login_button, cookie_textarea):
+#     asyncio.create_task(save_cookies_async(browser_dict, save_cookie_button, get_login_button, cookie_textarea))
 
 
 # 打开对应平台的登录页面
@@ -427,7 +426,7 @@ class UserUI(tk.Frame):
 
         # 保存 Cookie 按钮
         save_cookie_button = tk.Button(form_frame, text="保存 Cookie", state="disabled",
-                                        command=lambda: save_cookies(browser_dict, save_cookie_button, get_login_button, username_entry, cookie_textarea))
+                                        command=lambda: save_cookies(browser_dict, save_cookie_button, get_login_button, cookie_textarea))
         save_cookie_button.grid(row=3, column=1, pady=10, padx=10)
 
         # 底部按钮区域

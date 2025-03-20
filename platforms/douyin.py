@@ -32,12 +32,13 @@ def upload_video(page, video_path, title, desc, tags, cover_path):
     :param cover_path: 封面图片路径
     """
     # 打开发布页面
-    page.goto("https://creator.douyin.com/creator-micro/content/upload")
+    page.goto("https://creator.douyin.com/creator-micro/content/publish?enter_from=publish_page")
     page.wait_for_load_state("load")
     print("已进入发布页面")
-    page.wait_for_selector('.semi-tabs.semi-tabs-top')
+    page.wait_for_selector('input[name="upload-btn"][accept*="video/mp4"]',state='attached')
+    print("找到了文件框")
     # 上传视频文件
-    video_upload_input = page.locator('input[type="file"]')  # 视频上传输入框
+    video_upload_input = page.locator('input[name="upload-btn"][accept*="video/mp4"]')  # 视频上传输入框
     if video_upload_input.count() == 0:
         raise Exception("未找到视频上传输入框")
     video_upload_input.set_input_files(video_path)
@@ -66,15 +67,36 @@ def upload_video(page, video_path, title, desc, tags, cover_path):
     #         time.sleep(1)
     #         tag_input.press("Enter")
     #         print(f"添加标签: {tag}")
-
+    # 等待只能推荐封面图片
+    page.wait_for_selector(
+        'div[class^="recommendCover-"] > div[class^="maskBox"] > img',
+        timeout=60000  # 设置超时时间为 60 秒（单位：毫秒）
+    )
+    # 选择封面
+    cover_input = page.locator('.content-upload-new div[class^="title"]:has-text("选择封面")').first
+    if not cover_input:
+        raise Exception("未找到封面选择器")
+    # 横版封面
+    cover_input.click()
+    time.sleep(1)
+    finish_button = page.wait_for_selector('.semi-button-content:has-text("完成")')
+    if finish_button.is_visible():
+        finish_button.click()
+        print("完成封面选择")
+    else:
+        raise Exception("未找到完成按钮")
+    
     # 等待视频上传成功
     wait_for_upload_progress(page)
 
-    # 上传封面图片
-    # print("开始上传封面...")
-    # page.locator('.fake-upload-trigger').click()  # 点击封面上传按钮
-    # page.locator('li:has-text("本地上传")').click()  # 选择本地上传
-    # upload_cover_image(page,cover_path)
+
+
+    # cover_upload_input = page.locator('input[name="upload-btn"][accept*="image/png"]')
+    # if cover_upload_input.count() == 0:
+    #     raise Exception("未找到封面上传输入框")
+    # cover_upload_input.set_input_files(cover_path)
+
+
 
     # 发布视频
     publish_video(page)
@@ -105,8 +127,9 @@ def wait_for_upload_progress(page, no_change_timeout=60):
                 elif time.time() - last_change_time > no_change_timeout:
                     raise TimeoutError("上传进度超过30秒无变化，可能上传失败")
             else:
-                if last_progress:
-                    print("上传进度无变化，上传成功")
+                reupload = page.locator('div[class^="text-"]', has_text="重新上传")
+                if reupload.count()>0 and reupload.is_visible():
+                    print("出现重新上传按钮，上传成功")
                     return
                 else:
                     print("等待上传进度显示...")
